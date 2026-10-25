@@ -27,6 +27,7 @@ interface Props {
   m: Message;
   chat: Chat;
   first: boolean;
+  fresh?: boolean;
   last: boolean;
   onMenu: (m: Message, x: number, y: number) => void;
   onOpenMedia: (m: Message) => void;
@@ -38,6 +39,7 @@ export const MessageItem = memo(function MessageItem({
   chat,
   first,
   last,
+  fresh,
   onMenu,
   onOpenMedia,
   onJumpTo,
@@ -73,7 +75,7 @@ export const MessageItem = memo(function MessageItem({
 
   return (
     <div
-      className={`msg ${out ? "out" : "in"}${first ? " first" : ""}${last ? " last" : ""}`}
+      className={`msg ${out ? "out" : "in"}${first ? " first" : ""}${last ? " last" : ""}${fresh ? " fresh" : ""}`}
       data-id={m.id}
       {...press}
       onClick={m.failed ? () => onMenu(m, 0, 0) : undefined}

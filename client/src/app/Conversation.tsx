@@ -37,6 +37,8 @@ export function Conversation({ chat }: { chat: Chat }) {
   const [viewer, setViewer] = useState<Message | null>(null);
   const [dragging, setDragging] = useState(false);
   const [unreadAnchor, setUnreadAnchor] = useState(0);
+  // Messages newer than the moment the chat opened get a pop-in animation; history renders still.
+  const openedAt = useMemo(() => Date.now(), [chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useTick(30_000);
 
   const title = chatTitle(chat, lang);
@@ -210,6 +212,7 @@ export function Conversation({ chat }: { chat: Chat }) {
           chat={chat}
           first={groupStart}
           last={groupEnd}
+          fresh={m.createdAt >= openedAt}
           onMenu={onMenu}
           onOpenMedia={setViewer}
           onJumpTo={jumpTo}

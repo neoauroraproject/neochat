@@ -47,6 +47,7 @@ export function ChatList() {
   const newMenu = useNewMenu();
   const sidebarVisible = useMedia("(min-width: 1281px)");
   const isMobile = useMobile();
+  const [scrolled, setScrolled] = useState(false);
   useTick(60_000);
 
   const list = useMemo(
@@ -74,7 +75,7 @@ export function ChatList() {
   const archivedCount = Object.values(chats).filter((c) => c.archived).length;
 
   return (
-    <div className="list-pane-inner">
+    <div className={`list-pane-inner${scrolled ? " scrolled" : ""}`}>
       <div className="list-head">
         <div className="top">
           <h1 className={isMobile ? "m-title" : ""}>
@@ -126,7 +127,7 @@ export function ChatList() {
           </div>
         )}
       </div>
-      <div className="list-scroll">
+      <div className="list-scroll" onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 12)}>
         {query ? (
           <SearchResults query={query} local={local} />
         ) : (

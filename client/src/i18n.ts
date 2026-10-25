@@ -174,6 +174,7 @@ const en = {
   "call.noMedia": "Microphone/camera access was denied. Calls need HTTPS and permission.",
   "call.ended": "Call ended",
   "call.backToCall": "Return to call",
+  "call.secure": "Secure call on your server",
 
   // explore
   "explore.title": "Explore",
@@ -433,6 +434,7 @@ const fa: Dict = {
   "call.noMedia": "دسترسی به میکروفون/دوربین داده نشد. تماس به HTTPS و اجازه نیاز دارد.",
   "call.ended": "تماس پایان یافت",
   "call.backToCall": "بازگشت به تماس",
+  "call.secure": "تماس امن روی سرور شما",
 
   "explore.title": "کاوش",
   "explore.hint": "افراد را با ‎@نام‌کاربری، یا گروه‌ها و کانال‌های عمومی را جستجو کنید.",

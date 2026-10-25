@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { Chat } from "../types";
 import { get } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
@@ -75,15 +76,23 @@ function NavPill() {
 }
 
 /** Mobile bottom bar from the design: four tabs with a raised accent "+" in the middle. */
-function TabBar() {
+function TabBar({ hidden }: { hidden?: boolean }) {
   const t = useT();
   const section = useApp((s) => s.section);
   const unread = useUnreadTotal();
   const lang = useApp((s) => s.lang);
   const newMenu = useNewMenu();
+  const bar = useRef<HTMLElement>(null);
+  const [ind, setInd] = useState<{ x: number; w: number } | null>(null);
+  // Sliding pill under the active tab; moves with a spring instead of jumping.
+  useLayoutEffect(() => {
+    const el = bar.current?.querySelector<HTMLElement>('button[aria-current="true"]');
+    if (el) setInd({ x: el.offsetLeft, w: el.offsetWidth });
+  }, [section, lang]);
   const tab = (n: (typeof navItems)[number]) => (
     <button
       key={n.id}
+      data-tab={n.id}
       aria-current={section === n.id}
       onClick={() => useApp.setState({ section: n.id })}
       aria-label={t(n.key)}
@@ -93,7 +102,10 @@ function TabBar() {
     </button>
   );
   return (
-    <nav className="tabbar">
+    <nav className={`tabbar${hidden ? " away" : ""}`} ref={bar} aria-hidden={hidden}>
+      {ind && (
+        <span className="tab-ind" style={{ transform: `translateX(${ind.x}px)`, width: ind.w }} />
+      )}
       {tab(navItems[0])}
       {tab(navItems[1])}
       <button
@@ -293,6 +305,21 @@ export function AppShell() {
   const chat = useApp((s) => (s.activeChatId ? s.chats[s.activeChatId] : undefined));
   const infoOpen = useApp((s) => s.infoOpen);
   const callPhase = useCall((s) => s.phase);
+  // Keep the closing conversation mounted briefly so it can slide out instead of vanishing.
+  const lastChat = useRef<Chat | undefined>(undefined);
+  const [leavingChat, setLeavingChat] = useState<Chat | undefined>();
+  useEffect(() => {
+    if (chat) {
+      lastChat.current = chat;
+      setLeavingChat(undefined);
+      return;
+    }
+    if (!lastChat.current) return;
+    setLeavingChat(lastChat.current);
+    lastChat.current = undefined;
+    const id = setTimeout(() => setLeavingChat(undefined), 320);
+    return () => clearTimeout(id);
+  }, [chat]);
 
   // Escape closes the conversation like Telegram Desktop; mobile back button closes the top screen.
   useEffect(() => {
@@ -330,18 +357,25 @@ export function AppShell() {
   const showInfo = infoOpen && chat;
 
   if (isMobile) {
+    const stackChat = chat || leavingChat;
     return (
       <div className="shell">
         <div className="window">
-          {section === "settings" ? (
-            <SettingsPane />
-          ) : (
-            <section className="pane panel list-pane">{listPane}</section>
+          <div key={section} className="tab-screen">
+            {section === "settings" ? (
+              <SettingsPane />
+            ) : (
+              <section className="pane panel list-pane">{listPane}</section>
+            )}
+          </div>
+          {stackChat && (
+            <div className={`push-screen${chat ? "" : " leaving"}`} key={stackChat.id}>
+              <Conversation chat={stackChat} />
+            </div>
           )}
-          {chat && <Conversation key={chat.id} chat={chat} />}
           {showInfo && <InfoPanel chat={chat} />}
         </div>
-        {!chat && <TabBar />}
+        <TabBar hidden={!!chat} />
         <OfflineBanner />
         <DeepLinks />
         {callPhase !== "idle" && <CallView />}
