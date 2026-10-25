@@ -15,7 +15,7 @@ import { chatTitle, listStamp, num, preview } from "../format";
 import { useT } from "../i18n";
 import { sortedChats, useApp, type Filter } from "../store";
 import type { Ad, Chat, RoomPreview, User } from "../types";
-import { useContacts, useMobile, useTick } from "./hooks";
+import { useContacts, useMedia, useMobile, useTick } from "./hooks";
 import { useNewMenu } from "./NewMenu";
 import { RoomPreviewModal } from "./RoomPreviewModal";
 
@@ -69,46 +69,45 @@ export function ChatList() {
     : [];
 
   const title = filter === "archive" ? t("nav.archive") : t("nav.chats");
+  const me = useApp((s) => s.me);
+  const narrow = !useMedia("(min-width: 1180px)");
   const compose = (
     <button
-      className="nav-btn"
+      className="glass-circle"
       onClick={(e) => newMenu.open(e.currentTarget)}
       aria-label={t("list.newChat")}
     >
-      <Icon name="edit" size={22} />
+      <Icon name="edit" size={20} />
     </button>
   );
 
   return (
-    <div className={`screen${collapsed ? " collapsed" : ""}`}>
-      {isMobile ? (
-        <header className="navbar">
-          <div className="nav-side">
-            {filter === "archive" && (
-              <button className="nav-btn" onClick={() => useApp.setState({ filter: "all" })}>
-                <Icon name="back" size={24} className="flip-rtl" />
-              </button>
-            )}
-          </div>
-          <div className="nav-title">{title}</div>
-          <div className="nav-side end">{compose}</div>
-        </header>
-      ) : (
-        <header className="list-toolbar">
-          <SearchField value={q} onChange={setQ} placeholder={t("list.search")} />
+    <div className={`screen list-screen${collapsed ? " collapsed" : ""}`}>
+      {isMobile && (
+        <header className="m-top">
+          {filter === "archive" ? (
+            <button className="glass-circle" onClick={() => useApp.setState({ filter: "all" })}>
+              <Icon name="back" size={22} className="flip-rtl" />
+            </button>
+          ) : (
+            <button
+              className="glass-circle avatar-btn"
+              onClick={() => useApp.setState({ section: "settings" })}
+              aria-label={t("nav.settings")}
+            >
+              {me && <Avatar id={me.id} name={me.displayName} media={me.avatar} size={38} />}
+            </button>
+          )}
+          <div className="m-title">{title}</div>
           {compose}
         </header>
       )}
       <div className="screen-scroll" onScroll={onScroll}>
-        {isMobile && (
-          <>
-            <h1 className="large-title">{title}</h1>
-            <div className="search-wrap">
-              <SearchField value={q} onChange={setQ} placeholder={t("list.search")} />
-            </div>
-          </>
-        )}
-        {!query && <FolderTabs />}
+        <div className="search-row">
+          <SearchField value={q} onChange={setQ} placeholder={t("list.search")} />
+          {!isMobile && compose}
+        </div>
+        {!query && (isMobile || narrow || filter === "archive") && <FolderTabs />}
         {query ? (
           <SearchResults query={query} local={local} />
         ) : (
@@ -163,7 +162,7 @@ function FolderTabs() {
     ...(archived ? [{ id: "archive" as Filter, label: t("nav.archive") }] : []),
   ];
   useEffect(() => {
-    const el = ref.current?.querySelector<HTMLElement>('[aria-selected="true"] span');
+    const el = ref.current?.querySelector<HTMLElement>('[aria-selected="true"]');
     if (el && ref.current) setInk({ x: el.offsetLeft, w: el.offsetWidth });
   }, [filter, lang, archived]);
   return (
@@ -204,10 +203,8 @@ function Stories() {
           onClick={() => useApp.getState().openDirect(u.id)}
           title={"@" + u.username}
         >
-          <span className="story-ring">
-            <Avatar id={u.id} name={u.displayName} media={u.avatar} size={56} />
-          </span>
-          <span className="name">{u.displayName.split(" ")[0]}</span>
+          <Avatar id={u.id} name={u.displayName} media={u.avatar} size={54} online={u.online} />
+          <span className="name">{u.displayName}</span>
         </button>
       ))}
     </div>
@@ -358,8 +355,7 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
         : "";
     sub = (
       <>
-        {who && <span className="who">{who}</span>}
-        {who && <br />}
+        {who && <span className="who">{who}: </span>}
         {preview(lm, lang, me?.id)}
       </>
     );
@@ -394,7 +390,7 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
 
   const read = !!(mine && lm && c.othersReadId >= lm.id);
   return (
-    <div className={`cell-wrap${compact ? " compact" : ""}`}>
+    <div className={`cell-wrap${compact ? " compact" : ""}${swipe.x !== 0 ? " swiping" : ""}`}>
       {isMobile && !compact && (
         <div className="swipe-actions" aria-hidden={!swipe.isOpen}>
           <button className="sa pin" onClick={act(items[0].onClick)}>
@@ -426,29 +422,31 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
           id={c.saved ? -1 : (c.peer?.id ?? c.id)}
           name={title}
           media={c.saved ? undefined : (c.peer?.avatar ?? c.avatar)}
-          size={compact ? 42 : isMobile ? 60 : 54}
+          size={compact ? 40 : isMobile ? 52 : 46}
           online={c.type === "direct" && !c.saved && c.peer?.online}
           icon={c.saved ? "bookmark" : undefined}
         />
         <span className="cell-body">
           <span className="line1">
-            {c.type === "group" && <Icon name="group" size={15} className="kind" />}
-            {c.type === "channel" && <Icon name="megaphone" size={15} className="kind" />}
+            {c.type === "group" && <Icon name="group" size={14} className="kind" />}
+            {c.type === "channel" && <Icon name="megaphone" size={14} className="kind" />}
             <span className="title">{title}</span>
-            {c.muted && <Icon name="bell-off" size={14} className="kind" />}
-            <span className="time">
-              {mine && lm && <Icon name={read ? "checks" : "check"} size={16} className="tick" />}
-              {listStamp(c.lastMessageAt, lang)}
-            </span>
+            {c.muted && <Icon name="bell-off" size={13} className="kind" />}
+            {c.pinned && <Icon name="pin" size={13} className="kind" />}
           </span>
           <span className="line2">
             <span className="sub">{sub}</span>
-            {c.unread > 0 ? (
-              <span className={`badge${c.muted ? " muted" : ""}`}>{num(c.unread, lang)}</span>
-            ) : c.pinned ? (
-              <Icon name="pin" size={15} className="pin-ic" />
-            ) : null}
+            <span className="dot-time">· {listStamp(c.lastMessageAt, lang)}</span>
           </span>
+        </span>
+        <span className="trail">
+          {c.unread > 0 ? (
+            <span className={`badge${c.muted ? " muted" : ""}`}>{num(c.unread, lang)}</span>
+          ) : read && c.peer && !c.saved ? (
+            <Avatar id={c.peer.id} name={title} media={c.peer.avatar} size={16} />
+          ) : mine ? (
+            <Icon name={read ? "checks" : "check"} size={16} className="tick" />
+          ) : null}
         </span>
       </button>
       {menu && <Menu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}

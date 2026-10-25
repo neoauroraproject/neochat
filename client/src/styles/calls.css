@@ -1,375 +1,340 @@
-/* ---------- WhatsApp-style call screen ---------- */
-.wa-call {
-  position: fixed;
-  z-index: 120;
-  inset: 0;
+/* =====================================================================
+   Call panel — the reference's right card: portrait, name, timer, control pill.
+   Desktop renders it inside the window's right card; phones get it full screen.
+   ===================================================================== */
+.call-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #fff;
+  color: var(--label);
   overflow: hidden;
-  background: #0b1014;
-  padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
-  animation: wa-in 420ms var(--ease-out);
+  isolation: isolate;
   user-select: none;
   -webkit-user-select: none;
+  animation: fade-in 260ms var(--ease-out);
 }
-@keyframes wa-in {
+.call-panel.embedded {
+  height: 100%;
+}
+.call-panel.full {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+  background:
+    linear-gradient(var(--window), var(--window)),
+    #1f1915 url("/scene-blur.jpg") center / cover no-repeat;
+  animation: call-in 420ms var(--ease-out);
+}
+@keyframes call-in {
   from {
     opacity: 0;
-    transform: scale(1.04);
+    transform: scale(1.03);
   }
 }
-.wa-call.ended {
-  animation: wa-out 1500ms var(--ease-out) forwards;
+.call-panel.ended {
+  animation: call-out 1500ms var(--ease-out) forwards;
 }
-@keyframes wa-out {
+@keyframes call-out {
   0%,
   60% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: scale(0.98);
   }
 }
 
-/* desktop: a phone-shaped floating window instead of full screen */
-@media (min-width: 761px) {
-  .wa-call {
-    inset: auto;
-    top: 50%;
-    inset-inline-end: 40px;
-    transform: translateY(-50%);
-    width: 380px;
-    height: min(720px, calc(100dvh - 60px));
-    border-radius: 34px;
-    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    animation: wa-in-desk 420ms var(--ease-out);
-  }
-  .wa-call.video {
-    width: min(920px, calc(100vw - 120px));
-  }
-  @keyframes wa-in-desk {
-    from {
-      opacity: 0;
-      transform: translateY(-48%) scale(0.96);
-    }
-  }
-}
-
-.wa-bg {
-  position: absolute;
-  inset: -40px;
-  background-size: cover;
-  background-position: center;
-  filter: blur(40px) saturate(140%);
-  transform: scale(1.1);
-  opacity: 0.85;
-}
-.wa-bg::after {
-  content: "";
+.cp-remote {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.15) 40%, rgba(0, 0, 0, 0.55));
-}
-.wa-bg[data-id="0"] { background-color: #b5651d; background-image: radial-gradient(circle at 30% 30%, #ff9f0a, #ff6b3d 60%, #3a1a10); }
-.wa-bg[data-id="1"] { background-image: radial-gradient(circle at 30% 30%, #5ac8fa, #0a84ff 60%, #0a1a3a); }
-.wa-bg[data-id="2"] { background-image: radial-gradient(circle at 30% 30%, #30d158, #0fae8f 60%, #06261e); }
-.wa-bg[data-id="3"] { background-image: radial-gradient(circle at 30% 30%, #bf5af2, #7d4cff 60%, #1c103a); }
-.wa-bg[data-id="4"] { background-image: radial-gradient(circle at 30% 30%, #ff375f, #ff6b8b 60%, #3a0f1a); }
-.wa-bg[data-id="5"] { background-image: radial-gradient(circle at 30% 30%, #64d2ff, #5e5ce6 60%, #12123a); }
-.wa-bg[data-id="6"] { background-image: radial-gradient(circle at 30% 30%, #ffd60a, #ff9f0a 60%, #3a2a05); }
-.wa-bg[data-id="7"] { background-image: radial-gradient(circle at 30% 30%, #ac8e68, #7a5c3c 60%, #22170c); }
-
-.wa-remote {
-  position: absolute;
-  inset: 0;
+  z-index: -1;
   width: 100%;
   height: 100%;
   object-fit: cover;
   background: #000;
   transition: opacity 400ms var(--ease-out);
 }
-.wa-call.video::after {
-  /* keep text legible over bright video */
+.call-panel.video::after {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: -1;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 22%, transparent 70%, rgba(0, 0, 0, 0.55));
-  transition: opacity 300ms;
+  background: linear-gradient(rgba(0, 0, 0, 0.45), transparent 25%, transparent 70%, rgba(0, 0, 0, 0.5));
 }
-.wa-call.chrome-off::after {
-  opacity: 0;
+.call-panel.video {
+  color: #fff;
 }
 
-.wa-top,
-.wa-who,
-.wa-portrait,
-.wa-controls,
-.wa-incoming {
-  position: relative;
-  z-index: 2;
+.cp-top,
+.cp-center,
+.cp-pill,
+.cp-answer {
   transition:
     opacity 300ms var(--ease-out),
     transform 400ms var(--ease-out);
 }
-.wa-call.chrome-off .wa-top,
-.wa-call.chrome-off .wa-who {
+.call-panel.chrome-off .cp-top {
   opacity: 0;
-  transform: translateY(-16px);
+  transform: translateY(-12px);
   pointer-events: none;
 }
-.wa-call.chrome-off .wa-controls {
+.call-panel.chrome-off .cp-pill {
   opacity: 0;
-  transform: translateY(30px);
+  transform: translateY(24px);
   pointer-events: none;
 }
 
-.wa-top {
+.cp-top {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 0;
+  padding: 14px 14px 0;
 }
-.wa-round {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  transition: transform 140ms var(--ease-out), background 160ms;
+.cp-top .icon-btn {
+  color: inherit;
 }
-.wa-round:active {
-  transform: scale(0.9);
+.cp-top .icon-btn:disabled {
+  opacity: 1;
 }
-.wa-round.ghost {
-  visibility: hidden;
+.cp-actions {
+  display: flex;
+  gap: 2px;
 }
-.wa-secure {
+.cp-secure {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--label-2);
+}
+.call-panel.video .cp-secure {
   color: rgba(255, 255, 255, 0.8);
 }
 
-.wa-who {
-  text-align: center;
-  margin-top: 4vh;
-  padding: 0 24px;
-}
-.wa-who h2 {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
-}
-.wa-state {
-  margin-top: 6px;
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.82);
-  font-variant-numeric: tabular-nums;
-  min-height: 24px;
-}
-
-.wa-portrait {
+.cp-center {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  text-align: center;
+}
+.call-panel.video .cp-center {
+  flex: 0;
+  padding-top: 4px;
+}
+.cp-portrait {
+  position: relative;
   display: grid;
   place-items: center;
-  position: relative;
+  margin-bottom: 16px;
 }
-.wa-portrait .avatar {
+.cp-portrait .avatar {
   position: relative;
   z-index: 1;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
 }
-.wa-portrait .avatar .face {
-  font-size: 56px;
+.cp-portrait .avatar,
+.cp-portrait .avatar .face {
+  border-radius: 36%;
 }
-.wa-portrait i {
+.cp-portrait .avatar .face {
+  font-size: 52px;
+}
+.cp-portrait i {
   position: absolute;
-  width: 150px;
-  height: 150px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.5);
+  width: 140px;
+  height: 140px;
+  border-radius: 36%;
+  border: 2px solid rgba(255, 255, 255, 0.45);
   opacity: 0;
 }
-.wa-portrait.ringing i {
-  animation: wa-ripple 2.4s var(--ease-out) infinite;
+.cp-portrait.ringing i {
+  animation: cp-ripple 2.4s var(--ease-out) infinite;
 }
-.wa-portrait.ringing i:nth-child(2) {
-  animation-delay: 0.8s;
+.cp-portrait.ringing i:nth-child(2) {
+  animation-delay: 1.2s;
 }
-.wa-portrait.ringing i:nth-child(3) {
-  animation-delay: 1.6s;
-}
-@keyframes wa-ripple {
+@keyframes cp-ripple {
   0% {
     transform: scale(1);
     opacity: 0.6;
   }
   100% {
-    transform: scale(2.1);
+    transform: scale(1.7);
     opacity: 0;
   }
 }
-
-.wa-call.video .wa-who {
-  margin-top: 8px;
+.cp-center h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
-.wa-call.video .wa-controls,
-.wa-call.video .wa-incoming {
-  margin-top: auto;
+.cp-state {
+  font-size: 18px;
+  color: var(--label-2);
+  font-variant-numeric: tabular-nums;
+  min-height: 24px;
 }
-
-.wa-controls {
-  width: min(100%, 440px);
-  display: flex;
-  justify-content: space-around;
-  gap: 4px;
-  margin: 0 0 18px;
-  padding: 16px 12px 14px;
-  border-radius: 30px 30px 26px 26px;
-  background: rgba(30, 36, 40, 0.55);
-  backdrop-filter: blur(30px) saturate(150%);
-  -webkit-backdrop-filter: blur(30px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-@media (max-width: 760px) {
-  .wa-controls {
-    margin-bottom: 0;
-    border-radius: 30px 30px 0 0;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  }
-}
-.wa-ctl {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  color: #fff;
-  min-width: 64px;
-}
-.wa-ctl .ic {
-  width: 58px;
-  height: 58px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.14);
-  transition:
-    transform 160ms var(--spring),
-    background 200ms,
-    color 200ms;
-}
-.wa-ctl:active .ic {
-  transform: scale(0.88);
-}
-.wa-ctl.on .ic {
-  background: #fff;
-  color: #0b1014;
-}
-.wa-ctl.end .ic {
-  background: #ff3b30;
-  box-shadow: 0 8px 24px rgba(255, 59, 48, 0.45);
-}
-.wa-ctl .lb {
-  font-size: 12px;
+.call-panel.video .cp-state {
   color: rgba(255, 255, 255, 0.85);
 }
 
-.wa-incoming {
+/* control pill */
+.cp-pill {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  margin: 0 16px 22px;
+  border-radius: 999px;
+  background: var(--fill);
+  border: 1px solid var(--card-edge);
+  backdrop-filter: var(--material-thin);
+  -webkit-backdrop-filter: var(--material-thin);
+}
+.call-panel.full .cp-pill {
+  margin-bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+}
+.cp-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: inherit;
+  transition:
+    transform 140ms var(--spring),
+    background-color 200ms ease,
+    color 200ms ease;
+}
+.cp-btn:active {
+  transform: scale(0.88);
+}
+.cp-btn.on {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1c1714;
+}
+.cp-btn.end {
+  background: #ff3b30;
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(255, 59, 48, 0.45);
+}
+@media (hover: hover) and (pointer: fine) {
+  .cp-btn:not(.on):not(.end):hover {
+    background: var(--fill);
+  }
+}
+
+/* incoming */
+.cp-answer {
   width: 100%;
   display: flex;
-  justify-content: space-around;
-  padding: 0 32px calc(48px + env(safe-area-inset-bottom, 0px));
+  justify-content: space-evenly;
+  padding: 0 24px 34px;
 }
-.wa-answer {
+.call-panel.full .cp-answer {
+  padding-bottom: calc(46px + env(safe-area-inset-bottom, 0px));
+}
+.cp-big {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  color: #fff;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
 }
-.wa-answer .ic {
-  width: 74px;
-  height: 74px;
+.cp-big svg {
+  width: 66px;
+  height: 66px;
+  padding: 19px;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
-  transition: transform 160ms var(--spring);
+  color: #fff;
+  box-sizing: border-box;
+  transition: transform 140ms var(--spring);
 }
-.wa-answer:active .ic {
+.cp-big:active svg {
   transform: scale(0.9);
 }
-.wa-answer.decline .ic {
+.cp-big.decline svg {
   background: #ff3b30;
-  box-shadow: 0 10px 30px rgba(255, 59, 48, 0.45);
+  box-shadow: 0 10px 28px rgba(255, 59, 48, 0.45);
 }
-.wa-answer.accept .ic {
-  background: #25d366;
-  box-shadow: 0 10px 30px rgba(37, 211, 102, 0.5);
-  animation: wa-nudge 1.6s var(--ease-out) infinite;
+.cp-big.accept svg {
+  background: #30d158;
+  box-shadow: 0 10px 28px rgba(48, 209, 88, 0.45);
+  animation: nudge 1.6s var(--ease-out) infinite;
 }
-@keyframes wa-nudge {
+@keyframes nudge {
   0%,
   60%,
   100% {
     transform: translateY(0);
   }
   70% {
-    transform: translateY(-10px);
+    transform: translateY(-9px);
   }
   80% {
     transform: translateY(0);
   }
   88% {
-    transform: translateY(-5px);
+    transform: translateY(-4px);
   }
 }
-.wa-answer .lb {
-  font-size: 14px;
-  font-weight: 600;
-}
 
-.wa-pip {
+/* draggable self-view */
+.pip {
   position: absolute;
   z-index: 3;
-  width: 112px;
+  width: 108px;
   aspect-ratio: 3 / 4;
-  border-radius: 18px;
+  border-radius: 20px;
   overflow: hidden;
   background: #111;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.2);
   touch-action: none;
   cursor: grab;
 }
-.wa-pip:active {
+.pip:active {
   cursor: grabbing;
 }
-.wa-pip video {
+.pip video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   pointer-events: none;
 }
-.wa-pip.tl { top: calc(76px + env(safe-area-inset-top, 0px)); left: 16px; }
-.wa-pip.tr { top: calc(76px + env(safe-area-inset-top, 0px)); right: 16px; }
-.wa-pip.bl { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); left: 16px; }
-.wa-pip.br { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); right: 16px; }
-.wa-call:not(.video) .wa-pip {
-  width: 92px;
+.pip.tl {
+  top: 70px;
+  left: 16px;
+}
+.pip.tr {
+  top: 70px;
+  right: 16px;
+}
+.pip.bl {
+  bottom: 104px;
+  left: 16px;
+}
+.pip.br {
+  bottom: 104px;
+  right: 16px;
+}
+.call-panel.full .pip.tl,
+.call-panel.full .pip.tr {
+  top: calc(70px + env(safe-area-inset-top, 0px));
 }
 
-/* minimized: green "return to call" pill like WhatsApp */
+/* minimized: "return to call" pill */
 .call-mini {
   position: fixed;
   z-index: 120;
@@ -381,11 +346,11 @@
   gap: 10px;
   padding: 9px 18px;
   border-radius: 999px;
-  background: #25d366;
+  background: #30d158;
   color: #fff;
   font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 10px 30px rgba(37, 211, 102, 0.4);
+  box-shadow: 0 10px 30px rgba(48, 209, 88, 0.4);
   animation: mini-in 380ms var(--spring);
   cursor: pointer;
   white-space: nowrap;

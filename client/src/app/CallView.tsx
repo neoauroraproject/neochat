@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mediaUrl } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
 import { Avatar } from "../components/ui";
@@ -12,27 +11,20 @@ import { useTick } from "./hooks";
 // Apple's momentum projection: where a flick would come to rest.
 const project = (v: number, rate = 0.99) => ((v / 1000) * rate) / (1 - rate);
 
-/** Self-view that can be dragged anywhere and snaps to the nearest corner, carrying the flick's momentum. */
+/** Self-view that follows the finger 1:1 and snaps to the corner its momentum points at. */
 function DraggablePip({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [corner, setCorner] = useState<"tl" | "tr" | "bl" | "br">("tr");
-  const drag = useRef<{
-    x: number;
-    y: number;
-    ox: number;
-    oy: number;
-    hist: { x: number; y: number; t: number }[];
-  } | null>(null);
+  const drag = useRef<{ x: number; y: number; hist: { x: number; y: number; t: number }[] } | null>(
+    null,
+  );
 
   const onDown = (e: React.PointerEvent) => {
     const el = ref.current!;
     el.setPointerCapture(e.pointerId);
-    const r = el.getBoundingClientRect();
     drag.current = {
       x: e.clientX,
       y: e.clientY,
-      ox: r.left,
-      oy: r.top,
       hist: [{ x: e.clientX, y: e.clientY, t: e.timeStamp }],
     };
     el.style.transition = "none";
@@ -54,18 +46,17 @@ function DraggablePip({ children }: { children: React.ReactNode }) {
     const vy = ((e.clientY - first.y) / dt) * 1000;
     const el = ref.current!;
     const r = el.getBoundingClientRect();
-    const cx = r.left + r.width / 2 + project(vx);
-    const cy = r.top + r.height / 2 + project(vy);
-    const parent = el.offsetParent?.getBoundingClientRect() ?? {
+    const parent = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect() ?? {
       left: 0,
       top: 0,
       width: innerWidth,
       height: innerHeight,
     };
-    const right = cx > parent.left + parent.width / 2;
-    const bottom = cy > parent.top + parent.height / 2;
-    // Spring back from the current spot into the new corner (no jump: start from the live position).
-    const next = `${bottom ? "b" : "t"}${right ? "r" : "l"}` as typeof corner;
+    const cx = r.left + r.width / 2 + project(vx);
+    const cy = r.top + r.height / 2 + project(vy);
+    const next =
+      `${cy > parent.top + parent.height / 2 ? "b" : "t"}${cx > parent.left + parent.width / 2 ? "r" : "l"}` as typeof corner;
+    // Start the settle from the live position so there is no jump.
     const before = el.getBoundingClientRect();
     setCorner(next);
     requestAnimationFrame(() => {
@@ -80,7 +71,7 @@ function DraggablePip({ children }: { children: React.ReactNode }) {
   return (
     <div
       ref={ref}
-      className={`wa-pip ${corner}`}
+      className={`pip ${corner}`}
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
@@ -91,8 +82,8 @@ function DraggablePip({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** WhatsApp-style call screen: blurred portrait backdrop, ringing ripples, labeled controls, auto-hiding UI in video. */
-export function CallView() {
+/** Call panel from the reference: squircle portrait, name, timer and a glass pill of controls. */
+export function CallView({ embedded }: { embedded?: boolean }) {
   const t = useT();
   const lang = useApp((s) => s.lang);
   const st = useCall();
@@ -122,7 +113,7 @@ export function CallView() {
     .some((tr) => tr.readyState === "live" && !tr.muted);
   const showVideo = st.video && st.phase === "active" && remoteHasVideo;
 
-  // In a video call the controls fade away after a few seconds; a tap brings them back.
+  // In video the controls fade after a few seconds; any touch brings them back.
   const poke = () => {
     setChrome(true);
     window.clearTimeout(hideTimer.current);
@@ -167,71 +158,74 @@ export function CallView() {
 
   const ctl = (icon: string, text: string, onClick: () => void, on = false, cls = "") => (
     <button
-      className={`wa-ctl ${cls}${on ? " on" : ""}`}
+      className={`cp-btn ${cls}${on ? " on" : ""}`}
       onClick={onClick}
       aria-pressed={on}
       aria-label={text}
+      title={text}
     >
-      <span className="ic">
-        <Icon name={icon} size={24} />
-      </span>
-      <span className="lb">{text}</span>
+      <Icon name={icon} size={22} />
     </button>
   );
 
-  return createPortal(
+  const panel = (
     <div
-      className={`wa-call${showVideo ? " video" : ""}${chrome ? "" : " chrome-off"}${st.phase === "ended" ? " ended" : ""}`}
+      className={`call-panel${embedded ? " embedded" : " full"}${showVideo ? " video" : ""}${chrome ? "" : " chrome-off"}${st.phase === "ended" ? " ended" : ""}`}
       role="dialog"
       aria-label={label}
       onPointerDown={poke}
     >
       {audioEl}
-      <div
-        className="wa-bg"
-        style={st.peer.avatar ? { backgroundImage: `url(${mediaUrl(st.peer.avatar)})` } : undefined}
-        data-id={st.peer.id % 8}
-      />
       {st.video && (
         <video
           ref={remoteVideo}
-          className="wa-remote"
+          className="cp-remote"
           autoPlay
           playsInline
           muted
           style={{ opacity: showVideo ? 1 : 0 }}
         />
       )}
-
-      <header className="wa-top">
+      <header className="cp-top">
         <button
-          className="wa-round"
+          className="icon-btn"
           onClick={() => st.setMinimized(true)}
           aria-label={t("call.minimize")}
           disabled={st.phase === "incoming"}
         >
-          <Icon name="down" size={22} />
+          <Icon name="back" size={24} className="flip-rtl" />
         </button>
-        <div className="wa-secure">
+        <span className="cp-secure">
           <Icon name="lock" size={12} />
           {t("call.secure")}
-        </div>
-        <span className="wa-round ghost" />
+        </span>
+        <span className="cp-actions">
+          <button className="icon-btn" aria-label={t("room.addMember")} disabled>
+            <Icon name="user-plus" size={22} />
+          </button>
+          <button className="icon-btn" aria-label="more" disabled>
+            <Icon name="more" size={22} />
+          </button>
+        </span>
       </header>
 
-      <div className="wa-who">
+      <div className="cp-center">
+        {!showVideo && (
+          <div className={`cp-portrait${ringing ? " ringing" : ""}`}>
+            <i />
+            <i />
+            <Avatar
+              id={st.peer.id}
+              name={st.peer.displayName}
+              media={st.peer.avatar}
+              size={140}
+              squircle
+            />
+          </div>
+        )}
         <h2>{st.peer.displayName}</h2>
-        <div className="wa-state">{label}</div>
+        <div className="cp-state">{label}</div>
       </div>
-
-      {!showVideo && (
-        <div className={`wa-portrait${ringing ? " ringing" : ""}`}>
-          <i />
-          <i />
-          <i />
-          <Avatar id={st.peer.id} name={st.peer.displayName} media={st.peer.avatar} size={150} />
-        </div>
-      )}
 
       {st.video && st.localStream && !st.cameraOff && st.phase !== "incoming" && (
         <DraggablePip>
@@ -246,41 +240,37 @@ export function CallView() {
       )}
 
       {st.phase === "incoming" ? (
-        <div className="wa-incoming">
-          <button className="wa-answer decline" onClick={st.hangup} aria-label={t("call.decline")}>
-            <span className="ic">
-              <Icon name="phone-down" size={30} />
-            </span>
-            <span className="lb">{t("call.decline")}</span>
+        <div className="cp-answer">
+          <button className="cp-big decline" onClick={st.hangup} aria-label={t("call.decline")}>
+            <Icon name="phone-down" size={28} />
+            <span>{t("call.decline")}</span>
           </button>
-          <button className="wa-answer accept" onClick={st.accept} aria-label={t("call.accept")}>
-            <span className="ic">
-              <Icon name={st.video ? "video" : "phone"} size={28} />
-            </span>
-            <span className="lb">{t("call.accept")}</span>
+          <button className="cp-big accept" onClick={st.accept} aria-label={t("call.accept")}>
+            <Icon name={st.video ? "video" : "phone"} size={26} />
+            <span>{t("call.accept")}</span>
           </button>
         </div>
       ) : (
-        <div className="wa-controls">
+        <div className="cp-pill">
+          {ctl(
+            st.cameraOff || !st.video ? "video-off" : "video",
+            t("call.camera"),
+            st.toggleCamera,
+            st.cameraOff || !st.video,
+          )}
+          {ctl(st.muted ? "mic-off" : "mic", t("call.mute"), st.toggleMute, st.muted)}
+          {ctl("flip", t("call.flip"), st.flip)}
           {ctl(
             st.speakerOff ? "speaker-off" : "speaker",
             t("call.speaker"),
             st.toggleSpeaker,
             st.speakerOff,
           )}
-          {st.video &&
-            ctl(
-              st.cameraOff ? "video-off" : "video",
-              t("call.camera"),
-              st.toggleCamera,
-              st.cameraOff,
-            )}
-          {st.video && navigator.maxTouchPoints > 0 && ctl("flip", t("call.flip"), st.flip)}
-          {ctl(st.muted ? "mic-off" : "mic", t("call.mute"), st.toggleMute, st.muted)}
           {ctl("phone-down", t("call.end"), st.hangup, false, "end")}
         </div>
       )}
-    </div>,
-    document.body,
+    </div>
   );
+
+  return embedded ? panel : createPortal(panel, document.body);
 }

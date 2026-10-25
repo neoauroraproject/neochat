@@ -10,100 +10,131 @@
    Design tokens — iOS system palette. Light is the base, dark overrides.
    ===================================================================== */
 :root {
-  --accent: #007aff;
+  --accent: #0a84ff;
   --accent-ink: #ffffff;
-  --danger: #ff3b30;
-  --success: #34c759;
-  --warning: #ff9500;
+  --danger: #ff453a;
+  --success: #30d158;
+  --warning: #ff9f0a;
   --unread: var(--accent);
 
-  --bg: #ffffff; /* plain screens: chat list */
-  --bg-grouped: #f2f2f7; /* settings-style screens */
-  --bg-elevated: #ffffff; /* cells, sheets, popovers */
-  --bg-secondary: #f7f7f8; /* desktop list column */
-  --fill: rgba(118, 118, 128, 0.12); /* search field, segmented track */
-  --fill-2: rgba(118, 118, 128, 0.2);
-  --fill-press: rgba(0, 0, 0, 0.06);
-  --label: #000000;
-  --label-2: rgba(60, 60, 67, 0.62);
-  --label-3: rgba(60, 60, 67, 0.32);
-  --sep: rgba(60, 60, 67, 0.22);
-  --bar: rgba(250, 250, 252, 0.78);
-  --bar-solid: #f9f9f9;
-  --scrim: rgba(0, 0, 0, 0.32);
+  /* visionOS glass: one blurred window, flat translucent cards on top of it */
+  --window: rgba(120, 108, 98, 0.3);
+  --window-edge: rgba(255, 255, 255, 0.18);
+  --window-highlight: rgba(255, 255, 255, 0.22);
+  --card: rgba(255, 255, 255, 0.07);
+  --card-edge: rgba(255, 255, 255, 0.12);
+  --sheet: rgba(64, 56, 50, 0.82);
+  --field: rgba(0, 0, 0, 0.24);
+  --lens: rgba(255, 255, 255, 0.16);
 
-  --bubble-in: #ffffff;
-  --bubble-in-ink: #000000;
+  --bg: transparent;
+  --bg-grouped: transparent;
+  --bg-elevated: var(--card);
+  --bg-secondary: transparent;
+  --fill: rgba(255, 255, 255, 0.12);
+  --fill-2: rgba(255, 255, 255, 0.2);
+  --fill-press: rgba(255, 255, 255, 0.08);
+  --label: rgba(255, 255, 255, 0.96);
+  --label-2: rgba(255, 255, 255, 0.62);
+  --label-3: rgba(255, 255, 255, 0.42);
+  --sep: rgba(255, 255, 255, 0.1);
+  --bar: rgba(72, 62, 54, 0.62);
+  --bar-solid: #3a322c;
+  --scrim: rgba(0, 0, 0, 0.36);
+  --dot-ring: rgba(58, 50, 44, 1);
+
+  --bubble-in: rgba(255, 255, 255, 0.13);
+  --bubble-in-ink: rgba(255, 255, 255, 0.96);
   --bubble-out: var(--accent);
   --bubble-out-ink: #ffffff;
-  --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.12);
-  --wall: #e9edf2;
-  --wall-pattern-opacity: 0.07;
+  --bubble-shadow: none;
+  --wall: transparent;
+  --wall-pattern-opacity: 0;
 
-  --shadow-pop: 0 10px 40px rgba(0, 0, 0, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --material: blur(20px) saturate(180%);
+  --shadow-window: 0 40px 120px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.22);
+  --shadow-pop: 0 18px 60px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+  --shadow-card: none;
+  --material: blur(50px) saturate(160%);
+  --material-thin: blur(24px) saturate(150%);
 
-  --r-sheet: 14px;
-  --r-group: 12px;
-  --r-control: 10px;
+  --r-window: 44px;
+  --r-card: 32px;
+  --r-row: 16px;
+  --r-sheet: 26px;
+  --r-group: 18px;
+  --r-control: 12px;
 
   --font:
     -apple-system, BlinkMacSystemFont, "Vazirmatn", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --spring: cubic-bezier(0.34, 1.3, 0.64, 1);
 
-  /* Aliases kept for the admin panel and inline styles written against the old tokens. */
+  /* Aliases kept for the admin panel and inline styles written against older tokens. */
   --text: var(--label);
   --text-2: var(--label-2);
   --text-3: var(--label-3);
-  --glass: var(--bg-elevated);
+  --glass: var(--card);
   --glass-thin: var(--fill);
-  --glass-thick: var(--bar-solid);
+  --glass-thick: var(--window);
   --glass-hover: var(--fill-press);
   --glass-active: var(--fill-2);
-  --glass-inset: var(--fill);
-  --glass-edge: var(--sep);
-  --glass-edge-strong: var(--sep);
+  --glass-inset: var(--field);
+  --glass-edge: var(--card-edge);
+  --glass-edge-strong: var(--window-edge);
   --shadow-float: var(--shadow-pop);
-  --shadow-window: none;
-  --blur: var(--material);
+  --blur: var(--material-thin);
   --blur-thick: var(--material);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
-:root[data-theme="dark"] {
-  --accent-dark-shift: 1;
-  --bg: #000000;
-  --bg-grouped: #000000;
-  --bg-elevated: #1c1c1e;
-  --bg-secondary: #111113;
-  --fill: rgba(118, 118, 128, 0.24);
-  --fill-2: rgba(118, 118, 128, 0.36);
-  --fill-press: rgba(255, 255, 255, 0.08);
-  --label: #ffffff;
-  --label-2: rgba(235, 235, 245, 0.6);
-  --label-3: rgba(235, 235, 245, 0.3);
-  --sep: rgba(84, 84, 88, 0.55);
-  --bar: rgba(22, 22, 24, 0.76);
-  --bar-solid: #161618;
-  --scrim: rgba(0, 0, 0, 0.5);
-  --bubble-in: #262628;
-  --bubble-in-ink: #ffffff;
-  --bubble-shadow: none;
-  --wall: #0d0e11;
-  --wall-pattern-opacity: 0.05;
-  --shadow-pop: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
-  --shadow-card: none;
-  color-scheme: dark;
+:root[data-theme="light"] {
+  --window: rgba(255, 250, 245, 0.55);
+  --window-edge: rgba(255, 255, 255, 0.7);
+  --window-highlight: rgba(255, 255, 255, 0.9);
+  --card: rgba(255, 255, 255, 0.45);
+  --card-edge: rgba(255, 255, 255, 0.7);
+  --sheet: rgba(250, 247, 243, 0.88);
+  --field: rgba(60, 40, 20, 0.07);
+  --lens: rgba(255, 255, 255, 0.85);
+  --fill: rgba(60, 40, 20, 0.07);
+  --fill-2: rgba(60, 40, 20, 0.13);
+  --fill-press: rgba(60, 40, 20, 0.06);
+  --label: rgba(20, 16, 12, 0.92);
+  --label-2: rgba(20, 16, 12, 0.6);
+  --label-3: rgba(20, 16, 12, 0.4);
+  --sep: rgba(60, 40, 20, 0.1);
+  --bar: rgba(255, 252, 248, 0.72);
+  --bar-solid: #f5efe9;
+  --scrim: rgba(40, 28, 18, 0.25);
+  --dot-ring: #f7f2ec;
+  --bubble-in: rgba(255, 255, 255, 0.78);
+  --bubble-in-ink: rgba(20, 16, 12, 0.94);
+  --shadow-window: 0 40px 120px rgba(60, 40, 20, 0.25), 0 12px 32px rgba(60, 40, 20, 0.12);
+  --shadow-pop: 0 18px 60px rgba(60, 40, 20, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  color-scheme: light;
 }
 
 @media (prefers-reduced-transparency: reduce) {
   :root {
-    --bar: var(--bar-solid);
+    --window: #3d342e;
+    --card: rgba(255, 255, 255, 0.05);
+    --bar: #3a322c;
+    --sheet: #3d342e;
     --material: none;
+    --material-thin: none;
+  }
+  :root[data-theme="light"] {
+    --window: #f4eee8;
+    --bar: #f5efe9;
+    --sheet: #f7f2ec;
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --label-2: rgba(255, 255, 255, 0.82);
+    --card-edge: rgba(255, 255, 255, 0.4);
   }
 }
 
@@ -125,7 +156,7 @@ body {
   font-size: 15px;
   line-height: 1.4;
   color: var(--label);
-  background: var(--bg);
+  background: #1c1714;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -205,9 +236,21 @@ select {
   white-space: nowrap;
 }
 
-/* The app is flat now; the old atmospheric backdrop is only kept for an admin-chosen image. */
+/* The room behind the glass: bundled photo-like scene, or the admin's own background. */
 .scene {
-  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: #1c1714 url("/scene.jpg") center / cover no-repeat;
+}
+.scene.has-image {
+  background-image: var(--bg-image);
+}
+:root[data-theme="light"] .scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 246, 236, 0.42);
 }
 
 .ltr {

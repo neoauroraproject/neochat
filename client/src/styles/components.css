@@ -116,8 +116,8 @@
   min-height: 44px;
   padding: 11px 16px;
   border-radius: var(--r-control);
-  background: var(--bg-elevated);
-  border: 0.5px solid var(--sep);
+  background: var(--field);
+  border: 1px solid transparent;
   outline: none;
   transition: box-shadow 150ms ease;
 }
@@ -160,16 +160,17 @@
 }
 .search svg {
   position: absolute;
-  inset-inline-start: 9px;
+  inset-inline-start: 12px;
   color: var(--label-2);
   pointer-events: none;
 }
 .search input {
   width: 100%;
   height: 36px;
-  border-radius: 10px;
-  padding-inline: 32px 30px;
-  background: var(--fill);
+  height: 42px;
+  border-radius: 14px;
+  padding-inline: 38px 32px;
+  background: var(--field);
   border: 0;
   outline: none;
   font-size: 17px;
@@ -249,15 +250,13 @@
   transition: background-color 200ms ease;
 }
 .segmented button[aria-pressed="true"] {
-  background: var(--bg-elevated);
+  background: var(--lens);
   font-weight: 600;
   box-shadow:
     0 3px 8px rgba(0, 0, 0, 0.12),
     0 3px 1px rgba(0, 0, 0, 0.04);
 }
-:root[data-theme="dark"] .segmented button[aria-pressed="true"] {
-  background: #636366;
-}
+
 
 /* ---------- Avatar ---------- */
 .avatar {
@@ -296,7 +295,7 @@
   min-height: 11px;
   border-radius: 50%;
   background: var(--success);
-  border: 2.5px solid var(--bg);
+  border: 2px solid var(--dot-ring);
 }
 .avatar.squircle {
   border-radius: 28%;
@@ -338,14 +337,15 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--r-sheet);
-  background: var(--bg-grouped);
-  box-shadow: var(--shadow-pop);
+  background: var(--sheet);
+  backdrop-filter: var(--material);
+  -webkit-backdrop-filter: var(--material);
+  border: 1px solid var(--window-edge);
+  box-shadow: var(--shadow-pop), inset 0 1px 0 var(--window-highlight);
   animation: pop-in 220ms var(--ease-out);
   overflow: hidden;
 }
-:root[data-theme="dark"] .modal {
-  background: var(--bg-elevated);
-}
+
 .modal.wide {
   width: min(660px, 100%);
 }
@@ -399,7 +399,7 @@
   .overlay.sheet-overlay .modal {
     width: 100%;
     max-height: calc(100dvh - 44px - env(safe-area-inset-top, 0px));
-    border-radius: 12px 12px 0 0;
+    border-radius: var(--r-sheet) var(--r-sheet) 0 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: sheet-up 420ms var(--ease-drawer);
     touch-action: pan-y;
@@ -434,8 +434,9 @@
   box-shadow: var(--shadow-pop);
   animation: menu-in 200ms var(--ease-out);
 }
-:root[data-theme="dark"] .menu {
-  background: rgba(37, 37, 39, 0.82);
+:root .menu {
+  background: var(--sheet);
+  border: 1px solid var(--window-edge);
 }
 .menu button {
   display: flex;
@@ -491,7 +492,7 @@
   font-size: 15px;
   font-weight: 500;
   color: #fff;
-  background: rgba(30, 30, 32, 0.9);
+  background: rgba(40, 34, 30, 0.86);
   backdrop-filter: var(--material);
   -webkit-backdrop-filter: var(--material);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
@@ -516,7 +517,8 @@
   gap: 12px;
   width: 100%;
   min-height: 52px;
-  padding: 7px 16px;
+  padding: 7px 12px;
+  border-radius: var(--r-row);
   text-align: start;
   position: relative;
   transition: background-color 150ms ease;
@@ -530,13 +532,7 @@
   }
 }
 .row[aria-current="true"] {
-  background: var(--accent);
-  color: #fff;
-}
-.row[aria-current="true"] .sub,
-.row[aria-current="true"] .time,
-.row[aria-current="true"] svg {
-  color: rgba(255, 255, 255, 0.85) !important;
+  background: var(--fill);
 }
 .row .grow {
   flex: 1;
@@ -565,7 +561,8 @@
 
 /* inset grouped list */
 .card-group {
-  background: var(--bg-elevated);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
   border-radius: var(--r-group);
   overflow: hidden;
   margin-bottom: 22px;

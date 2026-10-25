@@ -1,38 +1,74 @@
 /* =====================================================================
-   Phone: stack navigation + native tab bar
+   Phone — the same glass, full-bleed. Screens sit on a pre-blurred copy of
+   the room so only floating chrome needs a live backdrop-filter.
    ===================================================================== */
 .phone {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: var(--bg);
+}
+.phone-glass,
+.push-screen {
+  background:
+    linear-gradient(var(--window), var(--window)),
+    #1f1915 url("/scene-blur.jpg") center / cover no-repeat;
+}
+:root[data-theme="light"] .phone-glass,
+:root[data-theme="light"] .push-screen {
+  background:
+    linear-gradient(rgba(255, 250, 245, 0.72), rgba(255, 250, 245, 0.72)),
+    #efe6dc url("/scene-blur.jpg") center / cover no-repeat;
+}
+.phone-glass {
+  position: absolute;
+  inset: 0;
 }
 .tab-screen {
   position: absolute;
   inset: 0;
-  padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px));
-  transition: transform 420ms var(--ease-drawer);
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 14px 0;
+  transition: transform 440ms var(--ease-drawer);
 }
 .tab-screen > * {
   height: 100%;
 }
-.phone .navbar,
-.phone .settings-pane > .navbar {
-  padding-top: env(safe-area-inset-top, 0px);
-  height: calc(44px + env(safe-area-inset-top, 0px));
-}
-.phone .conv-head {
-  padding-top: calc(4px + env(safe-area-inset-top, 0px));
+.tab-screen .screen-scroll {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
-/* pushed screens slide in from the trailing edge; the screen below drifts back a third */
+/* top bar: floating glass circles around a centered title */
+.m-top {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 12px;
+  flex-shrink: 0;
+}
+.m-title {
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.phone .navbar {
+  padding: 2px 0 6px;
+}
+.phone .large-title {
+  font-size: 32px;
+  padding: 0 4px 12px;
+}
+.phone .stories .story .name {
+  font-size: 12px;
+}
+
+/* stacked navigation */
 .push-screen {
   position: absolute;
   inset: 0;
   z-index: 10;
-  background: var(--bg);
-  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.12);
-  animation: push-in 440ms var(--ease-drawer);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.3);
+  animation: push-in 460ms var(--ease-drawer);
 }
 .push-screen.top {
   z-index: 12;
@@ -59,7 +95,7 @@
 }
 [dir="rtl"] .push-screen {
   animation-name: push-in-rtl;
-  box-shadow: 10px 0 40px rgba(0, 0, 0, 0.12);
+  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.3);
 }
 [dir="rtl"] .push-screen.leaving {
   animation-name: push-out-rtl;
@@ -78,79 +114,118 @@
   }
 }
 
-/* ---------- Tab bar ---------- */
-.tabbar {
-  display: none;
-}
-.phone .tabbar {
+/* ---------- Telegram-style capsule: icons only ---------- */
+.capsule {
   position: absolute;
   z-index: 8;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   display: flex;
-  height: calc(50px + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  gap: 2px;
+  height: 64px;
+  padding: 6px;
+  border-radius: 999px;
+  transform: translateX(-50%);
   background: var(--bar);
   backdrop-filter: var(--material);
   -webkit-backdrop-filter: var(--material);
-  box-shadow: 0 -0.5px 0 var(--sep);
+  border: 1px solid var(--window-edge);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 var(--window-highlight);
+  transition:
+    transform 420ms var(--ease-drawer),
+    opacity 300ms var(--ease-out);
 }
-.phone .tabbar.away {
+.capsule.away {
+  transform: translate(-50%, 160%);
+  opacity: 0;
   pointer-events: none;
 }
-.tabbar button {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  padding-top: 3px;
-  color: #999999;
-}
-:root[data-theme="dark"] .tabbar button {
-  color: #8e8e93;
-}
-.tabbar button[aria-current="true"] {
-  color: var(--accent);
-}
-.tabbar .tab-ic {
+.capsule button {
   position: relative;
+  z-index: 1;
+  width: 64px;
+  height: 52px;
+  border-radius: 999px;
   display: grid;
   place-items: center;
-  height: 28px;
-  transition: transform 150ms var(--ease-out);
+  color: var(--label-2);
+  transition:
+    color 200ms ease,
+    transform 140ms var(--ease-out);
 }
-.tabbar button:active .tab-ic {
-  transform: scale(0.88);
+.capsule button[aria-current="true"] {
+  color: var(--label);
 }
-.tabbar .tab-lb {
-  font-size: 10.5px;
-  font-weight: 500;
+.capsule button:active {
+  transform: scale(0.9);
 }
-.tabbar .badge {
+.capsule .lens {
   position: absolute;
-  top: -3px;
-  inset-inline-start: 16px;
+  top: 6px;
+  left: 0;
+  height: 52px;
+  border-radius: 999px;
+  background: var(--lens);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition:
+    transform 440ms var(--spring),
+    width 440ms var(--spring);
+}
+.capsule .badge {
+  position: absolute;
+  top: 5px;
+  inset-inline-start: calc(50% + 4px);
   min-width: 18px;
   height: 18px;
-  font-size: 12px;
+  font-size: 11px;
   padding: 0 5px;
   background: #ff3b30;
 }
 
-/* ---------- Phone-sized adjustments ---------- */
+/* ---------- Conversation on the phone: floating chrome ---------- */
+.phone .conv-head {
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
+  gap: 8px;
+}
+.phone .conv-head::after {
+  display: none;
+}
+.phone .conv-head .who {
+  height: 48px;
+  padding: 0 14px 0 4px;
+  border-radius: 999px;
+  background: var(--bar);
+  backdrop-filter: var(--material-thin);
+  -webkit-backdrop-filter: var(--material-thin);
+  border: 1px solid var(--card-edge);
+}
+[dir="rtl"] .phone .conv-head .who {
+  padding: 0 4px 0 14px;
+}
+.phone .conv-head > .icon-btn {
+  width: 44px;
+  height: 44px;
+  background: var(--bar);
+  border: 1px solid var(--card-edge);
+}
 .phone .messages {
-  padding-inline: 8px;
+  padding-inline: 10px;
 }
 .phone .msg {
-  max-width: 82%;
+  max-width: 84%;
+}
+.phone .composer-wrap {
+  padding: 6px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+}
+.phone .chat-top-ad {
+  margin: 0 14px 6px;
 }
 .phone .info-pane,
 .phone .settings-pane {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 14px env(safe-area-inset-bottom, 0px);
 }
 .phone .tab-screen .settings-pane {
-  padding-bottom: 0;
+  padding: 0;
 }

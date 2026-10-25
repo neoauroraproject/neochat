@@ -285,15 +285,13 @@ export function Conversation({ chat }: { chat: Chat }) {
       }}
     >
       <header className="conv-head">
-        {isMobile && (
-          <button
-            className="icon-btn"
-            onClick={() => useApp.getState().openChat(null)}
-            aria-label={t("common.back")}
-          >
-            <Icon name="back" size={22} className="flip-rtl" />
-          </button>
-        )}
+        <button
+          className={isMobile ? "glass-circle" : "icon-btn"}
+          onClick={() => useApp.getState().openChat(null)}
+          aria-label={t("common.back")}
+        >
+          <Icon name="back" size={22} className="flip-rtl" />
+        </button>
         <button className="who" onClick={openInfo}>
           <Avatar
             id={chat.saved ? -1 : (chat.peer?.id ?? chat.id)}

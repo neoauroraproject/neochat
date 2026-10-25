@@ -86,6 +86,8 @@ const paths: Record<string, string> = {
 
 // Solid variants (like SF Symbols ".fill") used for selected tabs; holes are cut with even-odd.
 const solids: Record<string, string> = {
+  video:
+    "M3 7.5A2 2 0 0 1 5 5.5h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Zm14.5 3 4.2-2.6c.4-.3.8 0 .8.4v7.4c0 .4-.4.7-.8.4l-4.2-2.6v-3Z",
   chat: "M20.5 11.5a8.5 8.5 0 0 1-12.4 7.6L3 20.5l1.5-4.3A8.5 8.5 0 1 1 20.5 11.5Z",
   phone:
     "M5 3.5h3.6c.4 0 .8.3 1 .7l1.6 4c.2.5 0 1-.4 1.3l-1.9 1.3a11 11 0 0 0 5.3 5.3l1.3-1.9c.3-.4.8-.6 1.3-.4l4 1.6c.4.2.7.6.7 1v3.6c0 .9-.8 1.6-1.7 1.5A17 17 0 0 1 3.5 5.2c-.1-.9.6-1.7 1.5-1.7Z",

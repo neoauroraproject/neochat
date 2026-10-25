@@ -1,43 +1,52 @@
 .admin-shell {
   position: fixed;
   inset: 0;
-  background: var(--bg-grouped);
+  display: flex;
+  justify-content: center;
+  padding: 28px;
 }
 .admin-window {
-  height: 100%;
+  flex: 1;
+  max-width: 1400px;
+  min-height: 0;
   display: grid;
   grid-template-columns: 260px 1fr;
-  min-height: 0;
+  gap: 20px;
+  padding: 20px;
+  border-radius: var(--r-window);
+  background: var(--window);
+  backdrop-filter: var(--material);
+  -webkit-backdrop-filter: var(--material);
+  border: 1px solid var(--window-edge);
+  box-shadow:
+    var(--shadow-window),
+    inset 0 1px 0 var(--window-highlight);
 }
 .admin-nav {
-  padding: 14px 10px;
+  padding: 8px 4px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   overflow-y: auto;
-  background: var(--bg-secondary);
-  border-inline-end: 0.5px solid var(--sep);
-}
-:root[data-theme="light"] .admin-nav {
-  background: #ebedf0;
+  scrollbar-width: none;
 }
 .side-item {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 38px;
+  height: 44px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: 14px;
   font-size: 15px;
   text-align: start;
   color: var(--label);
   transition: background-color 150ms ease;
 }
 .side-item .ic {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
   background: var(--accent);
@@ -56,8 +65,7 @@
   text-overflow: ellipsis;
 }
 .side-item[aria-current="true"] {
-  background: var(--accent);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
 }
 .side-item[aria-current="true"] .ic {
   background: rgba(255, 255, 255, 0.22);
@@ -89,7 +97,11 @@
 .admin-main {
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 26px clamp(16px, 4vw, 48px) 48px;
+  padding: 26px clamp(16px, 3vw, 40px) 40px;
+  border-radius: var(--r-card);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  scrollbar-width: thin;
 }
 .admin-main h1 {
   margin: 0 0 4px;
@@ -424,4 +436,4 @@ table.tbl {
 .admin-nav .side-item:nth-of-type(9) .ic { background: #34c759; }
 .admin-nav .side-item:nth-of-type(10) .ic { background: #ff3b30; }
 .admin-nav .side-item:nth-of-type(11) .ic { background: #636366; }
-.admin-nav .side-item[aria-current="true"] .ic { background: rgba(255, 255, 255, 0.22); }
+

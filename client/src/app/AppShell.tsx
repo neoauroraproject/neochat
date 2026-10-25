@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { adHref, adsFor, adTarget, trackImpression } from "../ads";
 import { get } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
 import { Avatar, BrandLogo } from "../components/ui";
-import { num } from "../format";
+import { chatTitle, num } from "../format";
 import { useT } from "../i18n";
-import { useApp, type Filter, type Section } from "../store";
+import { sortedChats, useApp, type Filter, type Section } from "../store";
 import type { Chat, RoomPreview } from "../types";
 import { CallView } from "./CallView";
 import { ChatList, matchesFilter } from "./ChatList";
 import { Conversation } from "./Conversation";
-import { useMobile } from "./hooks";
+import { useMedia, useMobile } from "./hooks";
 import { InfoPanel } from "./InfoPanel";
 import { CallsPane, ExplorePane } from "./Panes";
 import { RoomPreviewModal } from "./RoomPreviewModal";
@@ -26,108 +26,166 @@ function useUnreadTotal() {
   );
 }
 
-const tabs: {
+const sections: {
   id: Section;
   icon: string;
   key: "nav.chats" | "nav.calls" | "nav.explore" | "nav.settings";
 }[] = [
   { id: "chats", icon: "chat", key: "nav.chats" },
-  { id: "calls", icon: "phone", key: "nav.calls" },
+  { id: "calls", icon: "video", key: "nav.calls" },
   { id: "explore", icon: "users", key: "nav.explore" },
   { id: "settings", icon: "settings", key: "nav.settings" },
 ];
 
-/** Native iOS tab bar: icon over label, filled glyph and accent tint on the active tab. */
-function TabBar({ hidden }: { hidden?: boolean }) {
+/** visionOS ornament: the vertical glass pill floating beside the window. */
+function Ornament() {
   const t = useT();
   const section = useApp((s) => s.section);
+  const me = useApp((s) => s.me);
   const unread = useUnreadTotal();
   const lang = useApp((s) => s.lang);
   return (
-    <nav className={`tabbar${hidden ? " away" : ""}`} aria-hidden={hidden}>
-      {tabs.map((n) => (
+    <nav className="ornament" aria-label="main">
+      {sections.map((n) => (
         <button
           key={n.id}
           aria-current={section === n.id}
           onClick={() => useApp.setState({ section: n.id })}
+          title={t(n.key)}
+          aria-label={t(n.key)}
         >
-          <span className="tab-ic">
-            <Icon name={n.icon} size={26} filled={section === n.id} stroke={1.7} />
-            {n.id === "chats" && unread > 0 && <span className="badge">{num(unread, lang)}</span>}
-          </span>
-          <span className="tab-lb">{t(n.key)}</span>
+          <Icon name={n.icon} size={22} filled={section === n.id} />
+          {n.id === "chats" && unread > 0 && <span className="badge">{num(unread, lang)}</span>}
+        </button>
+      ))}
+      {me?.isAdmin && (
+        <>
+          <span className="orn-sep" />
+          <button
+            onClick={() => location.assign("/admin")}
+            title={t("nav.admin")}
+            aria-label={t("nav.admin")}
+          >
+            <Icon name="dashboard" size={21} />
+          </button>
+        </>
+      )}
+    </nav>
+  );
+}
+
+/** Telegram-style floating capsule: icons only, a lens slides behind the active tab. */
+function TabCapsule({ hidden }: { hidden?: boolean }) {
+  const t = useT();
+  const section = useApp((s) => s.section);
+  const unread = useUnreadTotal();
+  const lang = useApp((s) => s.lang);
+  const bar = useRef<HTMLElement>(null);
+  const [lens, setLens] = useState<{ x: number; w: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = bar.current?.querySelector<HTMLElement>('button[aria-current="true"]');
+    if (el) setLens({ x: el.offsetLeft, w: el.offsetWidth });
+  }, [section, lang]);
+  return (
+    <nav className={`capsule${hidden ? " away" : ""}`} ref={bar} aria-hidden={hidden}>
+      {lens && (
+        <span className="lens" style={{ transform: `translateX(${lens.x}px)`, width: lens.w }} />
+      )}
+      {sections.map((n) => (
+        <button
+          key={n.id}
+          aria-current={section === n.id}
+          aria-label={t(n.key)}
+          onClick={() => useApp.setState({ section: n.id })}
+        >
+          <Icon name={n.icon === "video" ? "phone" : n.icon} size={26} filled={section === n.id} />
+          {n.id === "chats" && unread > 0 && <span className="badge">{num(unread, lang)}</span>}
         </button>
       ))}
     </nav>
   );
 }
 
-/** Desktop folder rail, like Telegram Desktop's folders column. */
-function Rail() {
+/** Sidebar card from the reference: profile, menu with icon tiles, and the rooms you're in. */
+function Sidebar() {
   const t = useT();
   const lang = useApp((s) => s.lang);
   const me = useApp((s) => s.me)!;
   const chats = useApp((s) => s.chats);
   const filter = useApp((s) => s.filter);
   const section = useApp((s) => s.section);
+  const activeId = useApp((s) => s.activeChatId);
   const count = (f: Filter) =>
     Object.values(chats).filter((c) => matchesFilter(c, f) && c.unread > 0 && !c.muted).length;
   const archived = Object.values(chats).some((c) => c.archived);
-  const folders: { id: Filter; icon: string; label: string }[] = [
-    { id: "all", icon: "chat", label: t("nav.all") },
+  const rooms = sortedChats(chats).filter((c) => c.type !== "direct" && !c.archived);
+  const items: { id: Filter; icon: string; label: string }[] = [
+    { id: "all", icon: "chat", label: t("nav.chats") },
     { id: "direct", icon: "users", label: t("nav.direct") },
     { id: "groups", icon: "group", label: t("nav.groups") },
     { id: "channels", icon: "megaphone", label: t("nav.channels") },
     ...(archived ? [{ id: "archive" as Filter, icon: "archive", label: t("nav.archive") }] : []),
   ];
-  const item = (
-    key: string,
-    icon: string,
-    label: string,
-    current: boolean,
-    onClick: () => void,
-    badge = 0,
-  ) => (
-    <button key={key} className="rail-item" aria-current={current} onClick={onClick} title={label}>
-      <span className="ic">
-        <Icon name={icon} size={24} filled={current} stroke={1.7} />
-        {badge > 0 && <span className="badge">{num(badge, lang)}</span>}
-      </span>
-      <span className="lb">{label}</span>
-    </button>
-  );
   return (
-    <nav className="rail" aria-label="folders">
-      <button
-        className="rail-me"
-        onClick={() => useApp.setState({ section: "settings" })}
-        title={me.displayName}
-      >
-        <Avatar id={me.id} name={me.displayName} media={me.avatar} size={38} />
-      </button>
-      {folders.map((f) =>
-        item(
-          f.id,
-          f.icon,
-          f.label,
-          section === "chats" && filter === f.id,
-          () => useApp.setState({ filter: f.id, section: "chats" }),
-          count(f.id),
-        ),
-      )}
-      <span className="rail-gap" />
-      {item("calls", "phone", t("nav.calls"), section === "calls", () =>
-        useApp.setState({ section: "calls" }),
-      )}
-      {item("explore", "compass", t("nav.explore"), section === "explore", () =>
-        useApp.setState({ section: "explore" }),
-      )}
-      {item("settings", "settings", t("nav.settings"), section === "settings", () =>
-        useApp.setState({ section: "settings" }),
-      )}
-      {me.isAdmin &&
-        item("admin", "dashboard", t("nav.admin"), false, () => location.assign("/admin"))}
-    </nav>
+    <aside className="side-card">
+      <div className="profile-row">
+        <button className="me" onClick={() => useApp.setState({ section: "settings" })}>
+          <Avatar id={me.id} name={me.displayName} media={me.avatar} size={44} />
+          <span className="name">{me.displayName}</span>
+          <Icon name="down" size={16} />
+        </button>
+        <button
+          className="icon-btn"
+          onClick={() => useApp.setState({ section: "settings" })}
+          aria-label={t("nav.settings")}
+        >
+          <Icon name="settings" size={22} filled />
+        </button>
+      </div>
+      <div className="menu-list">
+        {items.map((i) => {
+          const n = count(i.id);
+          return (
+            <button
+              key={i.id}
+              className="menu-row"
+              aria-current={section === "chats" && filter === i.id}
+              onClick={() => useApp.setState({ filter: i.id, section: "chats" })}
+            >
+              <span className="tile">
+                <Icon name={i.icon} size={20} filled />
+              </span>
+              <span className="lb">{i.label}</span>
+              {n > 0 && <span className="badge pill">{num(n, lang)}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {rooms.length > 0 && <div className="side-label">{t("nav.rooms")}</div>}
+      <div className="room-list">
+        {rooms.map((c) => (
+          <button
+            key={c.id}
+            className="room-row"
+            aria-current={activeId === c.id}
+            onClick={() => useApp.getState().openChat(c.id)}
+          >
+            <Avatar id={c.id} name={c.title} media={c.avatar} size={40} squircle />
+            <span className="txt">
+              <span className="t">{chatTitle(c, lang)}</span>
+              <span className="s">
+                {t(c.type === "channel" ? "presence.subscribers" : "presence.members", {
+                  n: num(c.memberCount, lang),
+                })}
+              </span>
+            </span>
+            {c.unread > 0 && <span className={`udot${c.muted ? " muted" : ""}`} />}
+          </button>
+        ))}
+      </div>
+      <SidebarAd />
+      <div className="side-foot">{t("common.copyright")}</div>
+    </aside>
   );
 }
 
@@ -152,13 +210,10 @@ function Welcome() {
   const config = useApp((s) => s.config);
   return (
     <section className="welcome">
-      <div>
-        <BrandLogo size={88} />
-        <h2>{config?.appName}</h2>
-        <p>{t("chat.select")}</p>
-        <p className="small">{config?.welcomeText || t("chat.selectHint")}</p>
-        <p className="copyright">{t("common.copyright")}</p>
-      </div>
+      <BrandLogo size={96} />
+      <h2>{config?.appName}</h2>
+      <p>{t("chat.select")}</p>
+      <p className="small">{config?.welcomeText || t("chat.selectHint")}</p>
     </section>
   );
 }
@@ -231,16 +286,18 @@ function useLeaving<T>(value: T | undefined, ms: number) {
 
 export function AppShell() {
   const isMobile = useMobile();
+  const wide = useMedia("(min-width: 1180px)");
   const section = useApp((s) => s.section);
   const activeId = useApp((s) => s.activeChatId);
   const chat = useApp((s) => (s.activeChatId ? s.chats[s.activeChatId] : undefined));
   const infoOpen = useApp((s) => s.infoOpen);
   const callPhase = useCall((s) => s.phase);
+  const callMin = useCall((s) => s.minimized);
   const leavingChat = useLeaving<Chat>(chat, 340);
   const showInfo = infoOpen && chat ? chat : undefined;
   const leavingInfo = useLeaving<Chat>(showInfo, 340);
 
-  // Escape closes the top layer like Telegram Desktop.
+  // Escape closes the top layer.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !document.querySelector(".overlay")) {
@@ -280,6 +337,7 @@ export function AppShell() {
     const stackInfo = showInfo || leavingInfo;
     return (
       <div className={`phone${chat ? " pushed" : ""}`}>
+        <div className="phone-glass" />
         <div key={section} className="tab-screen">
           {section === "settings" ? <SettingsPane /> : listPane}
         </div>
@@ -293,7 +351,7 @@ export function AppShell() {
             <InfoPanel chat={stackInfo} />
           </div>
         )}
-        <TabBar hidden={!!chat} />
+        <TabCapsule hidden={!!chat} />
         <OfflineBanner />
         <DeepLinks />
         {callPhase !== "idle" && <CallView />}
@@ -301,30 +359,26 @@ export function AppShell() {
     );
   }
 
+  // Desktop: calls live inside the right card, exactly like the reference.
+  const inCall = callPhase !== "idle" && !callMin;
+  let right: React.ReactNode;
+  if (inCall) right = <CallView embedded />;
+  else if (section === "settings") right = <SettingsPane />;
+  else if (showInfo) right = <InfoPanel chat={showInfo} />;
+  else if (chat) right = <Conversation key={chat.id} chat={chat} />;
+  else right = <Welcome />;
+
   return (
-    <div className={`desk${showInfo && section !== "settings" ? " with-info" : ""}`}>
-      <Rail />
-      <section className="col-list">
-        {listPane}
-        <SidebarAd />
-      </section>
-      <main className="col-main">
-        {section === "settings" ? (
-          <SettingsPane />
-        ) : chat ? (
-          <Conversation key={chat.id} chat={chat} />
-        ) : (
-          <Welcome />
-        )}
-      </main>
-      {showInfo && section !== "settings" && (
-        <aside className="col-info">
-          <InfoPanel chat={showInfo} />
-        </aside>
-      )}
+    <div className="vos">
+      <Ornament />
+      <div className={`vos-window${wide ? "" : " narrow"}`}>
+        {wide && <Sidebar />}
+        <section className="vos-list">{listPane}</section>
+        <main className="vos-card">{right}</main>
+      </div>
+      {callPhase !== "idle" && callMin && <CallView />}
       <OfflineBanner />
       <DeepLinks />
-      {callPhase !== "idle" && <CallView />}
     </div>
   );
 }

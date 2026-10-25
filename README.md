@@ -11,7 +11,7 @@ A private, Telegram-style messenger for your own server — shipped as a single 
 [دانلود آخرین نسخه / Download](https://github.com/neoauroraproject/neochat/releases/latest) ·
 [راهنمای کامل / Full guide](docs/BINARY_EDITION.md)
 
-<img src="docs/screenshots/desktop-dark.png" alt="NeoChat desktop" width="900" />
+<img src="docs/screenshots/desktop-en.png" alt="NeoChat desktop" width="900" />
 
 </div>
 
@@ -21,7 +21,7 @@ A private, Telegram-style messenger for your own server — shipped as a single 
 - **کار در قطعی اینترنت بین‌الملل** — هیچ CDN یا سرویس خارجی لازم نیست؛ فونت‌ها و آیکون‌ها داخل برنامه‌اند.
 - **بدون شماره تلفن** — حساب فقط با نام کاربری و رمز عبور.
 - **تماس صوتی و تصویری** — صفحه تماس شبیه واتس‌اپ، تصویر خودی قابل جابه‌جایی؛ WebRTC با رله TURN داخلی که پشت NAT هم وصل می‌شود.
-- **طراحی نیتیو** — رابط شبیه اپ‌های iOS: عنوان بزرگ جمع‌شونده، نوار تب استاندارد، کشیدن ردیف‌ها برای سنجاق/بی‌صدا/بایگانی، حباب‌های دُم‌دار و برگه‌های پایین‌کش.
+- **طراحی شیشه‌ای visionOS** — پنجره شیشه‌ای شناور روی پس‌زمینه گرم، کارت کناری با آیکون‌ها، نوار ناوبری عمودی؛ در موبایل نوار پایین شناور فقط-آیکون مثل تلگرام. مشخصات کامل در [`docs/design/visionos-spec.md`](docs/design/visionos-spec.md).
 - **انیمیشن‌های نرم** — ورود و خروج صفحه‌ها، نوار پایین با نشانگر فنری، عنوان جمع‌شونده و پیام‌هایی که نرم وارد می‌شوند.
 - **گروه و کانال** — لینک عمومی یا دعوت خصوصی، مدیران، پاسخ، ویرایش، تیک خوانده‌شدن، آخرین بازدید.
 - **عکس، ویدیو، فایل و پیام صوتی** — با محدودیت حجم قابل تنظیم و پیش‌نمایش سبک.
