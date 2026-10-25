@@ -1,0 +1,20 @@
+﻿@import "tailwindcss";
+@import "@neochat/ui/tokens.css";
+@import "@neochat/ui/components.css";
+@import "./styles/telegram.css";
+
+@theme {
+  --color-brand: var(--tg-blue);
+  --color-surface: var(--tg-sidebar);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}

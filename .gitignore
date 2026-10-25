@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+
+# Env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+
+# Runtime data
+data/
+volumes/
+*.pid
+coverage/
+
+# Offline bundle output
+deploy/offline/bundle/
+*.tar.gz
+
+# Secrets / certs
+*.pem
+*.key
+!deploy/caddy/*.example
+
+# NeoChat binary build (server/ + client/)
+!server/web/dist/
+server/web/dist/*
+!server/web/dist/.gitkeep
+server/neochat
+server/neochat.exe
+release/
+neochat-data/
+
+# Local tooling
+.claude/
+apps/api/build-*.txt

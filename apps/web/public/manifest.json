@@ -1,0 +1,18 @@
+{
+  "name": "NeoChat",
+  "short_name": "NeoChat",
+  "description": "Self-hosted secure messaging platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0d9488",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

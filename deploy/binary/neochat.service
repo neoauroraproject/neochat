@@ -1,0 +1,29 @@
+# systemd unit for the NeoChat single binary.
+# Install:
+#   sudo useradd --system --home /var/lib/neochat --create-home neochat
+#   sudo install -m 755 neochat-linux-amd64 /usr/local/bin/neochat
+#   sudo cp neochat.service /etc/systemd/system/ && sudo systemctl enable --now neochat
+# Open ports: 443/tcp (web + API), 3478/udp+tcp (call relay).
+[Unit]
+Description=NeoChat self-hosted messenger
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=neochat
+Group=neochat
+ExecStart=/usr/local/bin/neochat -addr :443 -http-redirect :80 -data /var/lib/neochat
+# With your own certificate instead of the self-signed one:
+# ExecStart=/usr/local/bin/neochat -addr :443 -data /var/lib/neochat -tls-cert /etc/neochat/cert.pem -tls-key /etc/neochat/key.pem
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/neochat
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

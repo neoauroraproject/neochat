@@ -1,0 +1,44 @@
+﻿# NeoChat Stage-2 HTTPS reverse proxy (Caddy)
+#
+# Replace placeholders via environment variables in docker-compose:
+#   NEOCHAT_DOMAIN       public hostname (required)
+#   ACME_EMAIL           Let's Encrypt contact (automatic HTTPS when set)
+#   TLS_CERT_FILE        optional manual cert path inside container
+#   TLS_KEY_FILE         optional manual key path inside container
+#
+# Automatic TLS: leave TLS_CERT_FILE / TLS_KEY_FILE empty and set ACME_EMAIL.
+# Manual TLS: mount certs to /certs and set:
+#   TLS_CERT_FILE=/certs/fullchain.pem
+#   TLS_KEY_FILE=/certs/privkey.pem
+# Then uncomment the `tls cert key` line below and comment out bare `tls`.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$NEOCHAT_DOMAIN} {
+	# Automatic HTTPS (default when TLS_CERT_FILE is empty)
+	tls
+
+	# Manual HTTPS example:
+	# tls {$TLS_CERT_FILE} {$TLS_KEY_FILE}
+
+	encode gzip zstd
+
+	handle /admin/* {
+		reverse_proxy admin:8080
+	}
+
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:3000
+	}
+
+	handle /socket.io* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy web:8080
+	}
+}

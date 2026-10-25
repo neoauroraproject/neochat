@@ -1,0 +1,59 @@
+{
+  "name": "neochat",
+  "version": "1.0.0-rc.1",
+  "private": true,
+  "description": "NeoChat — self-hosted secure messaging platform (v1.0.0-rc.1)",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build:packages && npm run build:apps",
+    "build:packages": "npm run build -w @neochat/config -w @neochat/shared -w @neochat/crypto -w @neochat/i18n -w @neochat/plugins -w @neochat/providers -w @neochat/ui -w @neochat/sdk",
+    "build:apps": "npm run build -w @neochat/api -w @neochat/web -w @neochat/admin",
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev -w @neochat/api",
+    "dev:web": "npm run dev -w @neochat/web",
+    "dev:admin": "npm run dev -w @neochat/admin",
+    "lint": "eslint .",
+    "lint:workspaces": "npm run lint --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "audit": "npm audit --audit-level=high || exit 0",
+    "test": "npm run test --workspaces --if-present",
+    "prepare": "husky",
+    "db:generate": "npm run db:generate -w @neochat/api",
+    "db:migrate": "npm run db:migrate -w @neochat/api",
+    "db:seed": "npm run db:seed -w @neochat/api",
+    "clean": "npm run clean --workspaces --if-present"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "@eslint/js": "^9.25.0",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.30.1"
+  }
+}

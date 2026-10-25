@@ -1,0 +1,251 @@
+﻿# NeoChat foundation stack — Stage-1 (HTTP via gateway on NEOCHAT_HTTP_PORT, default 8085)
+#
+# From repo root:
+#   cp .env.example .env
+#   docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
+#
+# Infra only (local dev with npm run dev):
+#   docker compose -f deploy/docker-compose.yml --env-file .env up -d postgres redis minio minio-init
+#
+# Optional LiveKit (enabled by default in v1):
+#   docker compose -f deploy/docker-compose.yml --env-file .env up -d livekit
+# Disable calls: set CALL_PROVIDER=none in .env
+# Stage-2 HTTPS: see deploy/docker-compose.tls.yml and docs/OPS.md
+
+name: neochat
+
+x-neochat-api-env: &neochat-api-env
+  NODE_ENV: ${NODE_ENV:-production}
+  NEOCHAT_INSTANCE_NAME: ${NEOCHAT_INSTANCE_NAME:-NeoChat}
+  PORT: ${PORT:-3000}
+  API_PORT: ${API_PORT:-3000}
+  API_HOST: ${API_HOST:-0.0.0.0}
+  PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:${NEOCHAT_HTTP_PORT:-8085}/api}
+  PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:${NEOCHAT_HTTP_PORT:-8085}}
+  PUBLIC_ADMIN_URL: ${PUBLIC_ADMIN_URL:-http://localhost:${NEOCHAT_HTTP_PORT:-8085}/admin}
+  DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-neochat}:${POSTGRES_PASSWORD:-neochat}@postgres:5432/${POSTGRES_DB:-neochat}}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env}
+  JWT_REFRESH_PEPPER: ${JWT_REFRESH_PEPPER:?Set JWT_REFRESH_PEPPER in .env}
+  JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-900}
+  JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-2592000}
+  ARGON2_MEMORY_COST: ${ARGON2_MEMORY_COST:-19456}
+  ARGON2_TIME_COST: ${ARGON2_TIME_COST:-2}
+  ARGON2_PARALLELISM: ${ARGON2_PARALLELISM:-1}
+  STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+  MINIO_PORT: ${MINIO_PORT:-9000}
+  MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-neochat}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-neochat-secret}
+  MINIO_BUCKET: ${MINIO_BUCKET:-neochat-media}
+  MINIO_REGION: ${MINIO_REGION:-us-east-1}
+  CALL_PROVIDER: ${CALL_PROVIDER:-livekit}
+  LIVEKIT_URL: ${LIVEKIT_URL:-ws://livekit:7880}
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-devsecret-change-me-000000000000}
+  NOTIFY_PROVIDER: ${NOTIFY_PROVIDER:-webpush}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+  SEARCH_PROVIDER: ${SEARCH_PROVIDER:-postgres}
+  ALLOW_FIRST_RUN_SETUP: ${ALLOW_FIRST_RUN_SETUP:-true}
+  RATE_LIMIT_TTL: ${RATE_LIMIT_TTL:-60}
+  RATE_LIMIT_LIMIT: ${RATE_LIMIT_LIMIT:-120}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+networks:
+  neochat:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks: [neochat]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-neochat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-neochat}
+      POSTGRES_DB: ${POSTGRES_DB:-neochat}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-neochat} -d ${POSTGRES_DB:-neochat}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [neochat]
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    networks: [neochat]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-neochat}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-neochat-secret}
+    ports:
+      - "${MINIO_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  minio-init:
+    image: minio/mc:latest
+    networks: [neochat]
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-neochat} ${MINIO_SECRET_KEY:-neochat-secret} &&
+      mc mb --ignore-existing local/${MINIO_BUCKET:-neochat-media}
+      "
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-neochat}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-neochat-secret}
+      MINIO_BUCKET: ${MINIO_BUCKET:-neochat-media}
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    networks: [neochat]
+    command: --config /etc/livekit.yaml
+    ports:
+      - "${LIVEKIT_HOST_PORT:-17880}:7880"
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:7880/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    networks: [neochat]
+    environment:
+      <<: *neochat-api-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/v1/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    networks: [neochat]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  admin:
+    build:
+      context: ..
+      dockerfile: apps/admin/Dockerfile
+      args:
+        VITE_BASE: /admin/
+    restart: unless-stopped
+    networks: [neochat]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    networks: [neochat]
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+    volumes:
+      - ./nginx/gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${NEOCHAT_HTTP_PORT:-8085}:8085"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8085/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    profiles: ["caddy"]
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    networks: [neochat]
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+    environment:
+      NEOCHAT_DOMAIN: ${NEOCHAT_DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      TLS_CERT_FILE: ${TLS_CERT_FILE:-}
+      TLS_KEY_FILE: ${TLS_KEY_FILE:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - ${TLS_CERT_DIR:-./certs}:/certs:ro
+    ports:
+      - "${NEOCHAT_HTTPS_PORT:-443}:443"
+      - "${NEOCHAT_HTTP_REDIRECT_PORT:-80}:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  caddy_data:
+  caddy_config:

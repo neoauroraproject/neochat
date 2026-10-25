@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.cursor
+*.md
+!deploy/**
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+coverage
+**/*.log
+deploy/offline/*.tar.gz
+deploy/offline/*.tar
+deploy/offline/images

@@ -1,0 +1,30 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strictPropertyInitialization": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "verbatimModuleSyntax": false,
+    "paths": {
+      "@neochat/config": ["../../packages/config/src/index.ts"],
+      "@neochat/shared": ["../../packages/shared/src/index.ts"],
+      "@neochat/plugins": ["../../packages/plugins/src/index.ts"],
+      "@neochat/providers": ["../../packages/providers/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

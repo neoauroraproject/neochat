@@ -1,0 +1,45 @@
+{
+  "name": "@neochat/web",
+  "version": "1.0.0-rc.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint src",
+    "preview": "vite preview",
+    "test": "echo \"(test) web\""
+  },
+  "dependencies": {
+    "@neochat/crypto": "*",
+    "@neochat/i18n": "*",
+    "@neochat/sdk": "*",
+    "@neochat/shared": "*",
+    "@neochat/ui": "*",
+    "@tanstack/react-query": "^5.62.8",
+    "@tanstack/react-virtual": "^3.13.12",
+    "idb": "^8.0.3",
+    "livekit-client": "^2.9.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.1.1",
+    "socket.io-client": "^4.8.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^16.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.30.1",
+    "vite": "^6.3.5"
+  }
+}

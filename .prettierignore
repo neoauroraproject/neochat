@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+coverage
+.turbo
+package-lock.json
+**/drizzle/meta
+**/*.tsbuildinfo
+apps/web/dist
+apps/admin/dist

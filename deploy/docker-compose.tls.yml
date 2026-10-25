@@ -1,0 +1,15 @@
+﻿# NeoChat Stage-2 TLS overlay
+#
+# Usage (from repo root, after editing deploy/caddy/Caddyfile placeholders):
+#   cp .env.example .env
+#   # set NEOCHAT_DOMAIN, ACME_EMAIL or TLS_CERT_FILE/TLS_KEY_FILE
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.tls.yml --profile caddy --env-file .env up -d --build
+#
+# With the caddy profile, do not publish the Stage-1 gateway port (Caddy terminates TLS).
+
+services:
+  gateway:
+    ports: !reset []
+
+  caddy:
+    profiles: ["caddy"]

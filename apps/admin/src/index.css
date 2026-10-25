@@ -1,0 +1,16 @@
+﻿@import "tailwindcss";
+@import "@neochat/ui/tokens.css";
+@import "@neochat/ui/components.css";
+
+@theme {
+  --color-brand: var(--nc-brand);
+  --color-surface: var(--nc-surface);
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}

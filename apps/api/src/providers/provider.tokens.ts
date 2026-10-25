@@ -1,0 +1,5 @@
+export const STORAGE_PROVIDER = Symbol("STORAGE_PROVIDER");
+export const CALL_PROVIDER = Symbol("CALL_PROVIDER");
+export const NOTIFICATION_PROVIDER = Symbol("NOTIFICATION_PROVIDER");
+export const SEARCH_PROVIDER = Symbol("SEARCH_PROVIDER");
+export const PLUGIN_PROVIDER = Symbol("PLUGIN_PROVIDER");

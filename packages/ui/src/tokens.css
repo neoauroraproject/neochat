@@ -1,0 +1,92 @@
+:root,
+:root[data-theme="light"],
+.light {
+  --nc-brand: #0d9488;
+  --nc-brand-dark: #0f766e;
+  --nc-brand-light: #14b8a6;
+  --nc-brand-muted: rgba(13, 148, 136, 0.12);
+
+  --nc-bg: #f8fafc;
+  --nc-surface: #ffffff;
+  --nc-surface-raised: #ffffff;
+  --nc-text: #0f172a;
+  --nc-muted: #64748b;
+  --nc-border: #e2e8f0;
+  --nc-border-strong: #cbd5e1;
+
+  --nc-danger: #dc2626;
+  --nc-danger-muted: rgba(220, 38, 38, 0.12);
+  --nc-success: #059669;
+  --nc-success-muted: rgba(5, 150, 105, 0.12);
+  --nc-warning: #d97706;
+  --nc-warning-muted: rgba(217, 119, 6, 0.12);
+
+  --nc-space-0: 0;
+  --nc-space-1: 4px;
+  --nc-space-2: 8px;
+  --nc-space-3: 12px;
+  --nc-space-4: 16px;
+  --nc-space-5: 20px;
+  --nc-space-6: 24px;
+  --nc-space-8: 32px;
+  --nc-space-10: 40px;
+  --nc-space-12: 48px;
+  --nc-space-16: 64px;
+
+  --nc-radius-sm: 6px;
+  --nc-radius-md: 10px;
+  --nc-radius-lg: 14px;
+  --nc-radius-xl: 20px;
+  --nc-radius-full: 9999px;
+
+  --nc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --nc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --nc-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+  --nc-shadow-xl: 0 24px 48px rgba(15, 23, 42, 0.16);
+
+  --nc-duration-fast: 120ms;
+  --nc-duration-normal: 200ms;
+  --nc-duration-slow: 320ms;
+  --nc-ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --nc-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --nc-font-sans: "Inter", "Vazirmatn", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --nc-font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+
+  --nc-z-dropdown: 100;
+  --nc-z-modal: 200;
+  --nc-z-toast: 300;
+}
+
+:root[data-theme="dark"],
+.dark {
+  --nc-bg: #0f172a;
+  --nc-surface: #1e293b;
+  --nc-surface-raised: #334155;
+  --nc-text: #f1f5f9;
+  --nc-muted: #94a3b8;
+  --nc-border: #334155;
+  --nc-border-strong: #475569;
+
+  --nc-brand-muted: rgba(20, 184, 166, 0.16);
+  --nc-danger-muted: rgba(248, 113, 113, 0.16);
+  --nc-success-muted: rgba(52, 211, 153, 0.16);
+  --nc-warning-muted: rgba(251, 191, 36, 0.16);
+
+  --nc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --nc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --nc-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --nc-shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.48);
+}
+
+html[dir="rtl"] {
+  direction: rtl;
+}
+
+body {
+  margin: 0;
+  font-family: var(--nc-font-sans);
+  background: var(--nc-bg);
+  color: var(--nc-text);
+  -webkit-font-smoothing: antialiased;
+}
