@@ -248,7 +248,7 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
               onClick={() => stopRec(true)}
               aria-label={t("chat.send")}
             >
-              <Icon name="send" size={20} className="flip-rtl" />
+              <Icon name="arrow-up" size={20} stroke={2.4} />
             </button>
           </>
         ) : (
@@ -264,38 +264,36 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
             >
               <Icon name="attach" size={22} />
             </button>
-            <textarea
-              ref={ta}
-              rows={1}
-              value={text}
-              placeholder={t("chat.placeholder")}
-              maxLength={config?.maxMessageLen}
-              enterKeyHint={coarse ? "enter" : "send"}
-              onChange={(e) => {
-                setText(e.target.value);
-                if (e.target.value) typing();
-              }}
-              onPaste={onPaste}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  send();
-                }
-                if (e.key === "Escape" && bar) onCancel();
-              }}
-            />
-            {!coarse && (
-              <button className="icon-btn" onClick={() => setEmoji(!emoji)} aria-label="emoji">
-                <Icon name="smile" size={22} />
-              </button>
-            )}
+            <div className="field-pill">
+              <textarea
+                ref={ta}
+                rows={1}
+                value={text}
+                placeholder={t("chat.placeholder")}
+                maxLength={config?.maxMessageLen}
+                enterKeyHint={coarse ? "enter" : "send"}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  if (e.target.value) typing();
+                }}
+                onPaste={onPaste}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    send();
+                  }
+                  if (e.key === "Escape" && bar) onCancel();
+                }}
+              />
+              {!coarse && (
+                <button className="icon-btn" onClick={() => setEmoji(!emoji)} aria-label="emoji">
+                  <Icon name="smile" size={22} />
+                </button>
+              )}
+            </div>
             {text.trim() ? (
               <button className="icon-btn send" onClick={send} aria-label={t("chat.send")}>
-                <Icon
-                  name={editing ? "check" : "send"}
-                  size={20}
-                  className={editing ? "" : "flip-rtl"}
-                />
+                <Icon name={editing ? "check" : "arrow-up"} size={20} stroke={2.4} />
               </button>
             ) : (
               <button

@@ -28,6 +28,7 @@ const paths: Record<string, string> = {
   back: "M15 5l-7 7 7 7",
   forward: "M9 5l7 7-7 7",
   down: "M5 9l7 7 7-7",
+  "arrow-up": "M12 19V5M5.5 11.5 12 5l6.5 6.5",
   more: "M5 12h.01M12 12h.01M19 12h.01",
   "more-v": "M12 5h.01M12 12h.01M12 19h.01",
   check: "M5 12.5l4.5 4.5L19 7.5",
@@ -83,6 +84,25 @@ const paths: Record<string, string> = {
   sliders: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4",
 };
 
+// Solid variants (like SF Symbols ".fill") used for selected tabs; holes are cut with even-odd.
+const solids: Record<string, string> = {
+  chat: "M20.5 11.5a8.5 8.5 0 0 1-12.4 7.6L3 20.5l1.5-4.3A8.5 8.5 0 1 1 20.5 11.5Z",
+  phone:
+    "M5 3.5h3.6c.4 0 .8.3 1 .7l1.6 4c.2.5 0 1-.4 1.3l-1.9 1.3a11 11 0 0 0 5.3 5.3l1.3-1.9c.3-.4.8-.6 1.3-.4l4 1.6c.4.2.7.6.7 1v3.6c0 .9-.8 1.6-1.7 1.5A17 17 0 0 1 3.5 5.2c-.1-.9.6-1.7 1.5-1.7Z",
+  users:
+    "M9 11.5a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4ZM1.5 20a7.5 7.5 0 0 1 15 0v1h-15v-1ZM16.8 11a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8ZM18 13.1A6 6 0 0 1 22.5 19v2H18v-1a9.4 9.4 0 0 0-2.8-6.7 6 6 0 0 1 2.8-.2Z",
+  group:
+    "M9 11.5a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4ZM1.5 20a7.5 7.5 0 0 1 15 0v1h-15v-1ZM16.8 11a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8ZM18 13.1A6 6 0 0 1 22.5 19v2H18v-1a9.4 9.4 0 0 0-2.8-6.7 6 6 0 0 1 2.8-.2Z",
+  settings:
+    "M13.7 2.3a1.7 1.7 0 0 0-3.4 0l-.2 1.4a8.4 8.4 0 0 0-2 .8l-1.1-.8a1.7 1.7 0 0 0-2.4 2.4l.8 1.1a8.4 8.4 0 0 0-.8 2l-1.4.2a1.7 1.7 0 0 0 0 3.4l1.4.2c.2.7.5 1.4.8 2l-.8 1.1a1.7 1.7 0 0 0 2.4 2.4l1.1-.8c.6.3 1.3.6 2 .8l.2 1.4a1.7 1.7 0 0 0 3.4 0l.2-1.4c.7-.2 1.4-.5 2-.8l1.1.8a1.7 1.7 0 0 0 2.4-2.4l-.8-1.1c.3-.6.6-1.3.8-2l1.4-.2a1.7 1.7 0 0 0 0-3.4l-1.4-.2a8.4 8.4 0 0 0-.8-2l.8-1.1a1.7 1.7 0 0 0-2.4-2.4l-1.1.8a8.4 8.4 0 0 0-2-.8l-.2-1.4ZM12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z",
+  compass: "M12 21.5a9.5 9.5 0 1 0 0-19 9.5 9.5 0 0 0 0 19ZM16 8l-2.3 5.7L8 16l2.3-5.7L16 8Z",
+  megaphone:
+    "M3 10v4a1.2 1.2 0 0 0 1.2 1.2h2.9l9 4.6V4.2l-9 4.6H4.2A1.2 1.2 0 0 0 3 10Zm15.5-1.9v7.8a4.2 4.2 0 0 0 0-7.8ZM7.2 16.4l1.3 4.8h2.8l-1.3-4.8Z",
+  archive:
+    "M3 3.5h18v4.5H3zM4 9h16v10.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5V9Zm6 3a1 1 0 0 0 0 2h4a1 1 0 0 0 0-2h-4Z",
+  dashboard: "M3.5 3.5h7.5v9H3.5zM13 3.5h7.5v5.5H13zM13 11h7.5v9.5H13zM3.5 14.5h7.5v6H3.5z",
+};
+
 export function Icon({
   name,
   size = 20,
@@ -96,6 +116,20 @@ export function Icon({
   className?: string;
   filled?: boolean;
 }) {
+  if (filled && solids[name]) {
+    return (
+      <svg
+        className={className}
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path d={solids[name]} fillRule="evenodd" clipRule="evenodd" />
+      </svg>
+    );
+  }
   return (
     <svg
       className={className}

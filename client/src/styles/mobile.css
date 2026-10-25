@@ -1,355 +1,156 @@
-.copyright {
-  margin: 14px 0 0;
-  font-size: 11.5px;
-  color: var(--text-3);
-  text-align: center;
-  letter-spacing: 0.01em;
+/* =====================================================================
+   Phone: stack navigation + native tab bar
+   ===================================================================== */
+.phone {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
 }
-.side-ad {
-  margin: 8px 0 4px;
+.tab-screen {
+  position: absolute;
+  inset: 0;
+  padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px));
+  transition: transform 420ms var(--ease-drawer);
 }
-.side-foot {
-  line-height: 1.6;
+.tab-screen > * {
+  height: 100%;
+}
+.phone .navbar,
+.phone .settings-pane > .navbar {
+  padding-top: env(safe-area-inset-top, 0px);
+  height: calc(44px + env(safe-area-inset-top, 0px));
+}
+.phone .conv-head {
+  padding-top: calc(4px + env(safe-area-inset-top, 0px));
 }
 
-/* ---------- Phone layout: the same glass app as desktop, arranged for one hand ---------- */
-@media (max-width: 760px) {
-  :root {
-    --m-bg: transparent;
-    --m-bar: var(--glass-thick);
-    --m-card: var(--glass-thin);
-    --m-line: var(--glass-edge);
-    --m-screen:
-      radial-gradient(60% 50% at 18% 12%, var(--scene-glow), transparent 70%),
-      linear-gradient(180deg, var(--scene-2) 0%, var(--scene-1) 45%, var(--scene-3) 100%);
+/* pushed screens slide in from the trailing edge; the screen below drifts back a third */
+.push-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--bg);
+  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.12);
+  animation: push-in 440ms var(--ease-drawer);
+}
+.push-screen.top {
+  z-index: 12;
+}
+.push-screen.leaving {
+  animation: push-out 320ms var(--ease-drawer) forwards;
+  pointer-events: none;
+}
+.push-screen > * {
+  height: 100%;
+}
+.phone.pushed .tab-screen {
+  transform: translateX(-28%);
+}
+@keyframes push-in {
+  from {
+    transform: translateX(100%);
   }
-
-  .list-pane {
-    background: transparent !important;
+}
+@keyframes push-out {
+  to {
+    transform: translateX(100%);
   }
-  /* pushed screens carry their own copy of the room so the list never shows through */
-  .conv,
-  .info-pane,
-  .settings-pane {
-    background: var(--m-screen) !important;
+}
+[dir="rtl"] .push-screen {
+  animation-name: push-in-rtl;
+  box-shadow: 10px 0 40px rgba(0, 0, 0, 0.12);
+}
+[dir="rtl"] .push-screen.leaving {
+  animation-name: push-out-rtl;
+}
+[dir="rtl"] .phone.pushed .tab-screen {
+  transform: translateX(28%);
+}
+@keyframes push-in-rtl {
+  from {
+    transform: translateX(-100%);
   }
-  .conv-head,
-  .composer-wrap,
-  .tabbar {
-    backdrop-filter: var(--blur-thick);
-    -webkit-backdrop-filter: var(--blur-thick);
-  }
-
-  /* header */
-  .list-head {
-    padding: 12px 6px 2px;
-    gap: 10px;
-  }
-  .list-head .top h1.m-title {
-    color: var(--accent);
-    font-size: 32px;
-    font-weight: 900;
-    letter-spacing: -0.025em;
-  }
-  .search input,
-  .segmented {
-    background: var(--m-card);
-  }
-  .segmented button[aria-pressed='true'] {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: none;
-  }
-
-  .list-scroll {
-    overflow-x: hidden;
-  }
-
-  /* stories row */
-  .m-section {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 6px 10px;
-    font-size: 17px;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-  }
-  .m-section button {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text-2);
-  }
-  .story-cards {
-    display: flex;
-    gap: 12px;
-    overflow-x: auto;
-    margin: 0 -14px;
-    padding: 2px 20px 16px;
-    scrollbar-width: none;
-    scroll-snap-type: x proximity;
-  }
-  .story-cards::-webkit-scrollbar {
-    display: none;
-  }
-  .story-card {
-    flex: 0 0 auto;
-    width: 66px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    scroll-snap-align: start;
-    transition: transform 120ms var(--ease-out);
-  }
-  .story-card:active {
-    transform: scale(0.95);
-  }
-  .story-card .tile {
-    width: 66px;
-    height: 70px;
-    border-radius: 18px;
-    overflow: hidden;
-    display: grid;
-    place-items: center;
-    background: var(--m-card);
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
-  }
-  .story-card .tile .avatar,
-  .story-card .tile .avatar .face {
-    width: 100% !important;
-    height: 100% !important;
-    border-radius: 0;
-    font-size: 24px;
-  }
-  .story-card.add .tile {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    border: 1px solid var(--m-line);
-    color: var(--text);
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
-  }
-  .story-card.add small {
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1.2;
-    text-align: center;
-    padding: 0 4px;
-  }
-  .story-card .mini {
-    margin-top: -15px;
-    padding: 2px;
-    border-radius: 50%;
-    background: var(--m-bg);
-    z-index: 1;
-  }
-  .story-card.online .mini {
-    box-shadow: 0 0 0 2px var(--accent);
-  }
-  .story-card .name {
-    margin-top: 4px;
-    max-width: 66px;
-    font-size: 11.5px;
-    font-weight: 600;
-    line-height: 1.25;
-    text-align: center;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  /* chat rows: dashed accent ring marks unread conversations */
-  .chat-row {
-    padding: 10px 6px;
-    gap: 14px;
-    border-radius: 16px;
-  }
-  .chat-row .avatar > .face {
-    box-shadow: none;
-  }
-  .chat-row.has-unread .avatar::before {
-    content: '';
-    position: absolute;
-    inset: -5px;
-    border-radius: 50%;
-    border: 2px dashed var(--accent);
-  }
-  .chat-row .title {
-    font-size: 16.5px;
-    font-weight: 700;
-  }
-  .chat-row.has-unread .sub {
-    color: var(--text);
-    font-weight: 600;
-  }
-  .chat-row .time .read,
-  .chat-row .sub .typing {
-    color: var(--accent);
-  }
-  .chat-row .sub .typing {
-    font-weight: 600;
-  }
-  .avatar .dot {
-    border-color: var(--m-bg);
-  }
-  .ad-card {
-    background: var(--m-card);
-    border-color: var(--m-line);
-  }
-
-  /* bottom bar with the raised "+" */
-  .tabbar {
-    left: 14px;
-    right: 14px;
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    height: 66px;
-    padding: 0 8px;
-    border-radius: 999px;
-    align-items: center;
-    background: var(--m-bar);
-    border: 1px solid var(--m-line);
-    border-top-color: var(--glass-edge-strong);
-    box-shadow: var(--shadow-float);
-    transition:
-      transform 420ms var(--ease-out),
-      opacity 300ms var(--ease-out);
-  }
-  .tabbar.away {
-    transform: translateY(140%);
-    opacity: 0;
-    pointer-events: none;
-  }
-  .tab-ind {
-    position: absolute;
-    left: 0;
-    top: 8px;
-    height: 50px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--accent) 18%, var(--glass-thin));
-    transition:
-      transform 460ms cubic-bezier(0.34, 1.3, 0.64, 1),
-      width 460ms cubic-bezier(0.34, 1.3, 0.64, 1);
-    pointer-events: none;
-  }
-  .tabbar button[aria-current='true'] svg {
-    animation: tab-pop 420ms var(--spring);
-  }
-  @keyframes tab-pop {
-    40% {
-      transform: scale(1.18) translateY(-2px);
-    }
-  }
-  .tabbar button {
-    flex: 1;
-    height: 56px;
-    display: grid;
-    place-items: center;
-    color: var(--text-2);
-    background: none !important;
-    border-radius: 16px;
-  }
-  .tabbar button[aria-current='true'] {
-    color: var(--accent);
-  }
-  .tabbar button:active {
-    transform: scale(0.92);
-  }
-  .tabbar .tab-fab {
-    flex: 0 0 60px;
-    width: 60px;
-    height: 60px;
-    margin-top: -30px;
-    z-index: 1;
-    border-radius: 50%;
-    background: var(--accent) !important;
-    color: #fff;
-    box-shadow:
-      0 0 0 6px var(--m-bar),
-      0 12px 28px color-mix(in srgb, var(--accent) 55%, transparent);
-    transition: transform 140ms var(--ease-out);
-  }
-  .tabbar .badge {
-    top: 8px;
-    background: #ff3b30;
-  }
-  .list-pane,
-  .settings-pane {
-    padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px));
-  }
-
-  /* conversation */
-  .conv-head {
-    background: var(--m-bar);
-    border-bottom: 1px solid var(--m-line);
-  }
-  .conv-head .who .status {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .messages {
-    mask-image: none;
-    -webkit-mask-image: none;
-  }
-  .bubble {
-    border: 0;
-  }
-  .msg.out .bubble,
-  :root[data-theme='light'] .msg.out .bubble {
-    background: var(--accent);
-    color: #fff;
-  }
-  .msg.out .bubble .stamp,
-  .msg.out .bubble .stamp .read,
-  :root[data-theme='light'] .msg.out .bubble .stamp,
-  :root[data-theme='light'] .msg.out .bubble .stamp .read {
-    color: rgba(255, 255, 255, 0.85);
-  }
-  .msg.out .file-box .s,
-  .msg.out .reply-quote span {
-    color: rgba(255, 255, 255, 0.85);
-  }
-  .day-sep,
-  .sys-msg {
-    background: var(--m-card);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-  .composer-wrap {
-    background: var(--m-bar);
-    border-top: 1px solid var(--m-line);
-  }
-  .composer,
-  .composer-bar {
-    background: var(--m-card);
-    border-color: transparent;
-  }
-  .composer .send {
-    background: var(--accent);
-  }
-
-  /* settings & info */
-  .card-group,
-  .me-card,
-  .info-actions button,
-  .sponsored {
-    background: var(--m-card);
-    border-color: transparent;
+}
+@keyframes push-out-rtl {
+  to {
+    transform: translateX(-100%);
   }
 }
 
-@media (max-width: 760px) {
-  .chat-top-ad {
-    margin: 0;
-    border-radius: 0;
-    border-width: 0 0 1px;
-    border-color: var(--m-line);
-    background: var(--m-bar);
-  }
+/* ---------- Tab bar ---------- */
+.tabbar {
+  display: none;
+}
+.phone .tabbar {
+  position: absolute;
+  z-index: 8;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  height: calc(50px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--bar);
+  backdrop-filter: var(--material);
+  -webkit-backdrop-filter: var(--material);
+  box-shadow: 0 -0.5px 0 var(--sep);
+}
+.phone .tabbar.away {
+  pointer-events: none;
+}
+.tabbar button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding-top: 3px;
+  color: #999999;
+}
+:root[data-theme="dark"] .tabbar button {
+  color: #8e8e93;
+}
+.tabbar button[aria-current="true"] {
+  color: var(--accent);
+}
+.tabbar .tab-ic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 28px;
+  transition: transform 150ms var(--ease-out);
+}
+.tabbar button:active .tab-ic {
+  transform: scale(0.88);
+}
+.tabbar .tab-lb {
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.tabbar .badge {
+  position: absolute;
+  top: -3px;
+  inset-inline-start: 16px;
+  min-width: 18px;
+  height: 18px;
+  font-size: 12px;
+  padding: 0 5px;
+  background: #ff3b30;
+}
+
+/* ---------- Phone-sized adjustments ---------- */
+.phone .messages {
+  padding-inline: 8px;
+}
+.phone .msg {
+  max-width: 82%;
+}
+.phone .info-pane,
+.phone .settings-pane {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.phone .tab-screen .settings-pane {
+  padding-bottom: 0;
 }

@@ -1,99 +1,109 @@
 @font-face {
-  font-family: 'Vazirmatn';
-  src: url('../assets/Vazirmatn.woff2') format('woff2');
+  font-family: "Vazirmatn";
+  src: url("../assets/Vazirmatn.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 
-/* ---------- Design tokens: a visionOS-like glass material over a warm, dim room ---------- */
+/* =====================================================================
+   Design tokens — iOS system palette. Light is the base, dark overrides.
+   ===================================================================== */
 :root {
-  --accent: #0a84ff;
+  --accent: #007aff;
   --accent-ink: #ffffff;
-  --danger: #ff453a;
-  --success: #30d158;
-  --warning: #ffd60a;
+  --danger: #ff3b30;
+  --success: #34c759;
+  --warning: #ff9500;
+  --unread: var(--accent);
 
-  --text: rgba(255, 255, 255, 0.96);
-  --text-2: rgba(255, 255, 255, 0.64);
-  --text-3: rgba(255, 255, 255, 0.42);
+  --bg: #ffffff; /* plain screens: chat list */
+  --bg-grouped: #f2f2f7; /* settings-style screens */
+  --bg-elevated: #ffffff; /* cells, sheets, popovers */
+  --bg-secondary: #f7f7f8; /* desktop list column */
+  --fill: rgba(118, 118, 128, 0.12); /* search field, segmented track */
+  --fill-2: rgba(118, 118, 128, 0.2);
+  --fill-press: rgba(0, 0, 0, 0.06);
+  --label: #000000;
+  --label-2: rgba(60, 60, 67, 0.62);
+  --label-3: rgba(60, 60, 67, 0.32);
+  --sep: rgba(60, 60, 67, 0.22);
+  --bar: rgba(250, 250, 252, 0.78);
+  --bar-solid: #f9f9f9;
+  --scrim: rgba(0, 0, 0, 0.32);
 
-  /* material weights: thick = window, regular = panels, thin = controls */
-  --glass-thick: rgba(92, 82, 74, 0.34);
-  --glass: rgba(255, 255, 255, 0.07);
-  --glass-thin: rgba(255, 255, 255, 0.11);
-  --glass-hover: rgba(255, 255, 255, 0.14);
-  --glass-active: rgba(255, 255, 255, 0.2);
-  --glass-inset: rgba(0, 0, 0, 0.22);
-  --glass-edge: rgba(255, 255, 255, 0.16);
-  --glass-edge-strong: rgba(255, 255, 255, 0.28);
-  --scrim: rgba(10, 6, 4, 0.45);
-  --bubble-in: rgba(255, 255, 255, 0.11);
-  --bubble-out: color-mix(in srgb, var(--accent) 62%, rgba(40, 30, 25, 0.4));
-  --shadow-window: 0 40px 120px rgba(0, 0, 0, 0.45), 0 10px 30px rgba(0, 0, 0, 0.25);
-  --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.35);
-  --blur-thick: blur(50px) saturate(170%);
-  --blur: blur(30px) saturate(160%);
+  --bubble-in: #ffffff;
+  --bubble-in-ink: #000000;
+  --bubble-out: var(--accent);
+  --bubble-out-ink: #ffffff;
+  --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.12);
+  --wall: #e9edf2;
+  --wall-pattern-opacity: 0.07;
 
-  --scene-1: #2a201a;
-  --scene-2: #4a3628;
-  --scene-3: #16110e;
-  --scene-glow: rgba(255, 196, 140, 0.22);
+  --shadow-pop: 0 10px 40px rgba(0, 0, 0, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --material: blur(20px) saturate(180%);
 
-  --r-window: 40px;
-  --r-panel: 28px;
-  --r-row: 18px;
-  --r-control: 14px;
+  --r-sheet: 14px;
+  --r-group: 12px;
+  --r-control: 10px;
 
-  --font: 'Vazirmatn', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --font:
+    -apple-system, BlinkMacSystemFont, "Vazirmatn", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --spring: cubic-bezier(0.34, 1.36, 0.64, 1);
-  color-scheme: dark;
+
+  /* Aliases kept for the admin panel and inline styles written against the old tokens. */
+  --text: var(--label);
+  --text-2: var(--label-2);
+  --text-3: var(--label-3);
+  --glass: var(--bg-elevated);
+  --glass-thin: var(--fill);
+  --glass-thick: var(--bar-solid);
+  --glass-hover: var(--fill-press);
+  --glass-active: var(--fill-2);
+  --glass-inset: var(--fill);
+  --glass-edge: var(--sep);
+  --glass-edge-strong: var(--sep);
+  --shadow-float: var(--shadow-pop);
+  --shadow-window: none;
+  --blur: var(--material);
+  --blur-thick: var(--material);
+  color-scheme: light;
 }
 
-:root[data-theme='light'] {
-  --text: rgba(20, 16, 12, 0.94);
-  --text-2: rgba(20, 16, 12, 0.6);
-  --text-3: rgba(20, 16, 12, 0.4);
-  --glass-thick: rgba(255, 250, 244, 0.5);
-  --glass: rgba(255, 255, 255, 0.4);
-  --glass-thin: rgba(255, 255, 255, 0.55);
-  --glass-hover: rgba(255, 255, 255, 0.7);
-  --glass-active: rgba(255, 255, 255, 0.85);
-  --glass-inset: rgba(60, 40, 20, 0.08);
-  --glass-edge: rgba(255, 255, 255, 0.7);
-  --glass-edge-strong: rgba(255, 255, 255, 0.9);
-  --scrim: rgba(60, 40, 25, 0.25);
-  --bubble-in: rgba(255, 255, 255, 0.72);
-  --bubble-out: color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.75));
-  --shadow-window: 0 40px 120px rgba(80, 50, 20, 0.22), 0 10px 30px rgba(80, 50, 20, 0.12);
-  --shadow-float: 0 18px 50px rgba(80, 50, 20, 0.2);
-  --scene-1: #e9dccd;
-  --scene-2: #cdb59c;
-  --scene-3: #f5ede4;
-  --scene-glow: rgba(255, 220, 170, 0.6);
-  color-scheme: light;
+:root[data-theme="dark"] {
+  --accent-dark-shift: 1;
+  --bg: #000000;
+  --bg-grouped: #000000;
+  --bg-elevated: #1c1c1e;
+  --bg-secondary: #111113;
+  --fill: rgba(118, 118, 128, 0.24);
+  --fill-2: rgba(118, 118, 128, 0.36);
+  --fill-press: rgba(255, 255, 255, 0.08);
+  --label: #ffffff;
+  --label-2: rgba(235, 235, 245, 0.6);
+  --label-3: rgba(235, 235, 245, 0.3);
+  --sep: rgba(84, 84, 88, 0.55);
+  --bar: rgba(22, 22, 24, 0.76);
+  --bar-solid: #161618;
+  --scrim: rgba(0, 0, 0, 0.5);
+  --bubble-in: #262628;
+  --bubble-in-ink: #ffffff;
+  --bubble-shadow: none;
+  --wall: #0d0e11;
+  --wall-pattern-opacity: 0.05;
+  --shadow-pop: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  --shadow-card: none;
+  color-scheme: dark;
 }
 
 @media (prefers-reduced-transparency: reduce) {
   :root {
-    --glass-thick: #2b231e;
-    --glass: #362d27;
-    --glass-thin: #40362f;
-    --blur-thick: none;
-    --blur: none;
-  }
-  :root[data-theme='light'] {
-    --glass-thick: #f3ece4;
-    --glass: #ffffff;
-    --glass-thin: #f7f2ec;
-  }
-}
-
-@media (prefers-contrast: more) {
-  :root {
-    --glass-edge: rgba(255, 255, 255, 0.5);
-    --text-2: rgba(255, 255, 255, 0.85);
+    --bar: var(--bar-solid);
+    --material: none;
   }
 }
 
@@ -113,11 +123,13 @@ body {
   height: 100%;
   font-family: var(--font);
   font-size: 15px;
-  line-height: 1.5;
-  color: var(--text);
-  background: var(--scene-3);
+  line-height: 1.4;
+  color: var(--label);
+  background: var(--bg);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01";
 }
 
 #root {
@@ -134,12 +146,12 @@ select {
 
 button,
 a,
-[role='button'] {
+[role="button"] {
   touch-action: manipulation;
 }
 
 button,
-[role='button'],
+[role="button"],
 .no-select {
   user-select: none;
   -webkit-user-select: none;
@@ -155,7 +167,7 @@ button {
 
 button:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 a {
@@ -166,6 +178,7 @@ a {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  border-radius: 6px;
 }
 
 input,
@@ -175,16 +188,12 @@ select {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-/* Thin, quiet scrollbars that live inside the glass */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-}
-:root[data-theme='light'] * {
-  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+  scrollbar-color: var(--fill-2) transparent;
 }
 
 .sr-only {
@@ -196,63 +205,39 @@ select {
   white-space: nowrap;
 }
 
-/* ---------- The room behind the glass ---------- */
+/* The app is flat now; the old atmospheric backdrop is only kept for an admin-chosen image. */
 .scene {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(60% 50% at 18% 12%, var(--scene-glow), transparent 70%),
-    radial-gradient(45% 40% at 85% 20%, rgba(255, 170, 110, 0.12), transparent 70%),
-    radial-gradient(70% 60% at 50% 110%, rgba(0, 0, 0, 0.55), transparent 70%),
-    linear-gradient(180deg, var(--scene-2) 0%, var(--scene-1) 45%, var(--scene-3) 100%);
-}
-.scene::before {
-  /* soft "furniture" shapes that give the glass something to refract */
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(18% 30% at 10% 55%, rgba(255, 210, 160, 0.1), transparent 70%),
-    radial-gradient(30% 12% at 50% 88%, rgba(120, 80, 50, 0.45), transparent 70%),
-    radial-gradient(16% 40% at 92% 60%, rgba(60, 40, 28, 0.6), transparent 70%);
-  filter: blur(20px);
-}
-.scene.has-image {
-  background: var(--scene-3) var(--bg-image) center / cover no-repeat;
-}
-.scene.has-image::before {
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.35));
-  filter: none;
-}
-:root[data-theme='light'] .scene.has-image::before {
-  background: rgba(255, 255, 255, 0.15);
+  display: none;
 }
 
-/* ---------- Materials ---------- */
-.glass-window {
-  background: var(--glass-thick);
-  backdrop-filter: var(--blur-thick);
-  -webkit-backdrop-filter: var(--blur-thick);
-  border: 1px solid var(--glass-edge);
-  border-top-color: var(--glass-edge-strong);
-  box-shadow: var(--shadow-window), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  border-radius: var(--r-window);
+.ltr {
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
+[dir="rtl"] .flip-rtl {
+  transform: scaleX(-1);
 }
 
-.glass {
-  background: var(--glass);
-  border: 1px solid var(--glass-edge);
-  border-radius: var(--r-panel);
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
 }
-
-.glass-float {
-  background: var(--glass-thick);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  border: 1px solid var(--glass-edge);
-  border-top-color: var(--glass-edge-strong);
-  box-shadow: var(--shadow-float);
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -260,6 +245,7 @@ select {
   *::before,
   *::after {
     animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
 }

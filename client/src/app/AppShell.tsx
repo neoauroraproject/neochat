@@ -1,23 +1,21 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Chat } from "../types";
+import { useEffect, useRef, useState } from "react";
+import { adHref, adsFor, adTarget, trackImpression } from "../ads";
 import { get } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
 import { Avatar, BrandLogo } from "../components/ui";
 import { num } from "../format";
 import { useT } from "../i18n";
-import { sortedChats, useApp, type Filter, type Section } from "../store";
-import type { RoomPreview } from "../types";
+import { useApp, type Filter, type Section } from "../store";
+import type { Chat, RoomPreview } from "../types";
 import { CallView } from "./CallView";
 import { ChatList, matchesFilter } from "./ChatList";
 import { Conversation } from "./Conversation";
-import { useMedia, useMobile } from "./hooks";
+import { useMobile } from "./hooks";
 import { InfoPanel } from "./InfoPanel";
 import { CallsPane, ExplorePane } from "./Panes";
 import { RoomPreviewModal } from "./RoomPreviewModal";
 import { SettingsPane } from "./SettingsPane";
-import { useNewMenu } from "./NewMenu";
-import { adHref, adsFor, adTarget, trackImpression } from "../ads";
 
 function useUnreadTotal() {
   return useApp((s) =>
@@ -28,96 +26,107 @@ function useUnreadTotal() {
   );
 }
 
-const navItems: {
+const tabs: {
   id: Section;
   icon: string;
   key: "nav.chats" | "nav.calls" | "nav.explore" | "nav.settings";
 }[] = [
   { id: "chats", icon: "chat", key: "nav.chats" },
   { id: "calls", icon: "phone", key: "nav.calls" },
-  { id: "explore", icon: "compass", key: "nav.explore" },
+  { id: "explore", icon: "users", key: "nav.explore" },
   { id: "settings", icon: "settings", key: "nav.settings" },
 ];
 
-function NavPill() {
-  const t = useT();
-  const section = useApp((s) => s.section);
-  const me = useApp((s) => s.me);
-  const unread = useUnreadTotal();
-  const lang = useApp((s) => s.lang);
-  return (
-    <nav className="navpill glass-float" aria-label="main">
-      {navItems.map((n) => (
-        <button
-          key={n.id}
-          aria-current={section === n.id}
-          onClick={() => useApp.setState({ section: n.id })}
-          title={t(n.key)}
-          aria-label={t(n.key)}
-        >
-          <Icon name={n.icon} size={22} />
-          {n.id === "chats" && unread > 0 && <span className="badge">{num(unread, lang)}</span>}
-        </button>
-      ))}
-      {me?.isAdmin && (
-        <>
-          <div className="sep" />
-          <button
-            onClick={() => location.assign("/admin")}
-            title={t("nav.admin")}
-            aria-label={t("nav.admin")}
-          >
-            <Icon name="dashboard" size={21} />
-          </button>
-        </>
-      )}
-    </nav>
-  );
-}
-
-/** Mobile bottom bar from the design: four tabs with a raised accent "+" in the middle. */
+/** Native iOS tab bar: icon over label, filled glyph and accent tint on the active tab. */
 function TabBar({ hidden }: { hidden?: boolean }) {
   const t = useT();
   const section = useApp((s) => s.section);
   const unread = useUnreadTotal();
   const lang = useApp((s) => s.lang);
-  const newMenu = useNewMenu();
-  const bar = useRef<HTMLElement>(null);
-  const [ind, setInd] = useState<{ x: number; w: number } | null>(null);
-  // Sliding pill under the active tab; moves with a spring instead of jumping.
-  useLayoutEffect(() => {
-    const el = bar.current?.querySelector<HTMLElement>('button[aria-current="true"]');
-    if (el) setInd({ x: el.offsetLeft, w: el.offsetWidth });
-  }, [section, lang]);
-  const tab = (n: (typeof navItems)[number]) => (
-    <button
-      key={n.id}
-      data-tab={n.id}
-      aria-current={section === n.id}
-      onClick={() => useApp.setState({ section: n.id })}
-      aria-label={t(n.key)}
-    >
-      <Icon name={n.id === "chats" ? "send" : n.icon} size={24} />
-      {n.id === "chats" && unread > 0 && <span className="badge">{num(unread, lang)}</span>}
+  return (
+    <nav className={`tabbar${hidden ? " away" : ""}`} aria-hidden={hidden}>
+      {tabs.map((n) => (
+        <button
+          key={n.id}
+          aria-current={section === n.id}
+          onClick={() => useApp.setState({ section: n.id })}
+        >
+          <span className="tab-ic">
+            <Icon name={n.icon} size={26} filled={section === n.id} stroke={1.7} />
+            {n.id === "chats" && unread > 0 && <span className="badge">{num(unread, lang)}</span>}
+          </span>
+          <span className="tab-lb">{t(n.key)}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** Desktop folder rail, like Telegram Desktop's folders column. */
+function Rail() {
+  const t = useT();
+  const lang = useApp((s) => s.lang);
+  const me = useApp((s) => s.me)!;
+  const chats = useApp((s) => s.chats);
+  const filter = useApp((s) => s.filter);
+  const section = useApp((s) => s.section);
+  const count = (f: Filter) =>
+    Object.values(chats).filter((c) => matchesFilter(c, f) && c.unread > 0 && !c.muted).length;
+  const archived = Object.values(chats).some((c) => c.archived);
+  const folders: { id: Filter; icon: string; label: string }[] = [
+    { id: "all", icon: "chat", label: t("nav.all") },
+    { id: "direct", icon: "users", label: t("nav.direct") },
+    { id: "groups", icon: "group", label: t("nav.groups") },
+    { id: "channels", icon: "megaphone", label: t("nav.channels") },
+    ...(archived ? [{ id: "archive" as Filter, icon: "archive", label: t("nav.archive") }] : []),
+  ];
+  const item = (
+    key: string,
+    icon: string,
+    label: string,
+    current: boolean,
+    onClick: () => void,
+    badge = 0,
+  ) => (
+    <button key={key} className="rail-item" aria-current={current} onClick={onClick} title={label}>
+      <span className="ic">
+        <Icon name={icon} size={24} filled={current} stroke={1.7} />
+        {badge > 0 && <span className="badge">{num(badge, lang)}</span>}
+      </span>
+      <span className="lb">{label}</span>
     </button>
   );
   return (
-    <nav className={`tabbar${hidden ? " away" : ""}`} ref={bar} aria-hidden={hidden}>
-      {ind && (
-        <span className="tab-ind" style={{ transform: `translateX(${ind.x}px)`, width: ind.w }} />
-      )}
-      {tab(navItems[0])}
-      {tab(navItems[1])}
+    <nav className="rail" aria-label="folders">
       <button
-        className="tab-fab"
-        onClick={(e) => newMenu.open(e.currentTarget, true)}
-        aria-label={t("list.newChat")}
+        className="rail-me"
+        onClick={() => useApp.setState({ section: "settings" })}
+        title={me.displayName}
       >
-        <Icon name="plus" size={26} stroke={2.4} />
+        <Avatar id={me.id} name={me.displayName} media={me.avatar} size={38} />
       </button>
-      {tab(navItems[2])}
-      {tab(navItems[3])}
-      {newMenu.element}
+      {folders.map((f) =>
+        item(
+          f.id,
+          f.icon,
+          f.label,
+          section === "chats" && filter === f.id,
+          () => useApp.setState({ filter: f.id, section: "chats" }),
+          count(f.id),
+        ),
+      )}
+      <span className="rail-gap" />
+      {item("calls", "phone", t("nav.calls"), section === "calls", () =>
+        useApp.setState({ section: "calls" }),
+      )}
+      {item("explore", "compass", t("nav.explore"), section === "explore", () =>
+        useApp.setState({ section: "explore" }),
+      )}
+      {item("settings", "settings", t("nav.settings"), section === "settings", () =>
+        useApp.setState({ section: "settings" }),
+      )}
+      {me.isAdmin &&
+        item("admin", "dashboard", t("nav.admin"), false, () => location.assign("/admin"))}
     </nav>
   );
 }
@@ -130,105 +139,11 @@ function SidebarAd() {
   }, [ad]);
   if (!ad) return null;
   return (
-    <a
-      className="ad-card side-ad"
-      href={adHref(ad)}
-      target={adTarget(ad)}
-      rel="noopener noreferrer"
-    >
-      <div className="grow">
-        <div className="t">{ad.title}</div>
-        {ad.body && <div className="b">{ad.body}</div>}
-      </div>
+    <a className="side-ad" href={adHref(ad)} target={adTarget(ad)} rel="noopener noreferrer">
+      <span className="t">{ad.title}</span>
+      {ad.body && <span className="b">{ad.body}</span>}
       <span className="tag">{ad.badge || t("chat.sponsored")}</span>
     </a>
-  );
-}
-
-/** Left column from the reference design: profile, sections with counters, and the rooms you're in. */
-function Sidebar() {
-  const t = useT();
-  const lang = useApp((s) => s.lang);
-  const me = useApp((s) => s.me)!;
-  const chats = useApp((s) => s.chats);
-  const filter = useApp((s) => s.filter);
-  const section = useApp((s) => s.section);
-  const config = useApp((s) => s.config);
-  const count = (f: Filter) =>
-    Object.values(chats).filter((c) => matchesFilter(c, f) && c.unread > 0 && !c.muted).length;
-  const rooms = sortedChats(chats).filter((c) => c.type !== "direct" && !c.archived);
-  const items: { id: Filter; icon: string; label: string }[] = [
-    { id: "all", icon: "chat", label: t("nav.chats") },
-    { id: "direct", icon: "users", label: t("nav.direct") },
-    { id: "groups", icon: "group", label: t("nav.groups") },
-    { id: "channels", icon: "megaphone", label: t("nav.channels") },
-    { id: "archive", icon: "archive", label: t("nav.archive") },
-  ];
-  return (
-    <aside className="pane panel sidebar">
-      <div className="profile-head">
-        <Avatar id={me.id} name={me.displayName} media={me.avatar} size={46} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="name">{me.displayName}</div>
-          <div className="handle">@{me.username}</div>
-        </div>
-        <button
-          className="icon-btn"
-          onClick={() => useApp.setState({ section: "settings" })}
-          aria-label={t("nav.settings")}
-        >
-          <Icon name="settings" size={21} />
-        </button>
-      </div>
-      {items.map((i) => {
-        const n = count(i.id);
-        return (
-          <button
-            key={i.id}
-            className="side-item"
-            aria-current={section === "chats" && filter === i.id}
-            onClick={() => useApp.setState({ filter: i.id, section: "chats" })}
-          >
-            <span className="ic">
-              <Icon name={i.icon} size={19} />
-            </span>
-            <span className="grow">{i.label}</span>
-            {n > 0 && <span className="badge">{num(n, lang)}</span>}
-          </button>
-        );
-      })}
-      {rooms.length > 0 && <div className="section-label">{t("nav.rooms")}</div>}
-      <div className="side-rooms">
-        {rooms.map((c) => (
-          <button
-            key={c.id}
-            className="row"
-            aria-current={useApp.getState().activeChatId === c.id}
-            onClick={() => useApp.getState().openChat(c.id)}
-          >
-            <Avatar id={c.id} name={c.title} media={c.avatar} size={38} squircle />
-            <div className="grow">
-              <div className="title">{c.title}</div>
-              <div className="sub">
-                {t(c.type === "channel" ? "presence.subscribers" : "presence.members", {
-                  n: num(c.memberCount, lang),
-                })}
-              </div>
-            </div>
-            {c.unread > 0 && (
-              <span
-                className={`badge${c.muted ? " muted" : ""}`}
-                style={{ minWidth: 10, width: 10, height: 10, padding: 0 }}
-              />
-            )}
-          </button>
-        ))}
-      </div>
-      <SidebarAd />
-      <div className="side-foot">
-        {config?.appName} · {t("common.copyright")}
-      </div>
-    </aside>
   );
 }
 
@@ -236,14 +151,12 @@ function Welcome() {
   const t = useT();
   const config = useApp((s) => s.config);
   return (
-    <section className="pane panel welcome">
+    <section className="welcome">
       <div>
-        <BrandLogo size={96} />
+        <BrandLogo size={88} />
         <h2>{config?.appName}</h2>
-        <p style={{ marginBottom: 6 }}>{t("chat.select")}</p>
-        <p style={{ fontSize: 13, color: "var(--text-3)" }}>
-          {config?.welcomeText || t("chat.selectHint")}
-        </p>
+        <p>{t("chat.select")}</p>
+        <p className="small">{config?.welcomeText || t("chat.selectHint")}</p>
         <p className="copyright">{t("common.copyright")}</p>
       </div>
     </section>
@@ -262,7 +175,7 @@ function OfflineBanner() {
   }, [connected]);
   if (!show) return null;
   return (
-    <div className="offline-banner glass-float">
+    <div className="offline-banner">
       <span className="spinner" />
       {navigator.onLine ? t("common.connecting") : t("common.offline")}
     </div>
@@ -297,31 +210,37 @@ function DeepLinks() {
   ) : null;
 }
 
+/** Keeps the last value mounted for `ms` after it becomes undefined, so screens can animate out. */
+function useLeaving<T>(value: T | undefined, ms: number) {
+  const last = useRef<T | undefined>(value);
+  const [leaving, setLeaving] = useState<T | undefined>();
+  useEffect(() => {
+    if (value) {
+      last.current = value;
+      setLeaving(undefined);
+      return;
+    }
+    if (!last.current) return;
+    setLeaving(last.current);
+    last.current = undefined;
+    const id = setTimeout(() => setLeaving(undefined), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return leaving;
+}
+
 export function AppShell() {
   const isMobile = useMobile();
-  const wide = useMedia("(min-width: 1281px)");
   const section = useApp((s) => s.section);
   const activeId = useApp((s) => s.activeChatId);
   const chat = useApp((s) => (s.activeChatId ? s.chats[s.activeChatId] : undefined));
   const infoOpen = useApp((s) => s.infoOpen);
   const callPhase = useCall((s) => s.phase);
-  // Keep the closing conversation mounted briefly so it can slide out instead of vanishing.
-  const lastChat = useRef<Chat | undefined>(undefined);
-  const [leavingChat, setLeavingChat] = useState<Chat | undefined>();
-  useEffect(() => {
-    if (chat) {
-      lastChat.current = chat;
-      setLeavingChat(undefined);
-      return;
-    }
-    if (!lastChat.current) return;
-    setLeavingChat(lastChat.current);
-    lastChat.current = undefined;
-    const id = setTimeout(() => setLeavingChat(undefined), 320);
-    return () => clearTimeout(id);
-  }, [chat]);
+  const leavingChat = useLeaving<Chat>(chat, 340);
+  const showInfo = infoOpen && chat ? chat : undefined;
+  const leavingInfo = useLeaving<Chat>(showInfo, 340);
 
-  // Escape closes the conversation like Telegram Desktop; mobile back button closes the top screen.
+  // Escape closes the top layer like Telegram Desktop.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !document.querySelector(".overlay")) {
@@ -334,6 +253,7 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The phone's back button/gesture pops the top screen.
   useEffect(() => {
     if (!isMobile || !activeId) return;
     history.pushState({ chat: activeId }, "");
@@ -354,27 +274,25 @@ export function AppShell() {
 
   const listPane =
     section === "calls" ? <CallsPane /> : section === "explore" ? <ExplorePane /> : <ChatList />;
-  const showInfo = infoOpen && chat;
 
   if (isMobile) {
     const stackChat = chat || leavingChat;
+    const stackInfo = showInfo || leavingInfo;
     return (
-      <div className="shell">
-        <div className="window">
-          <div key={section} className="tab-screen">
-            {section === "settings" ? (
-              <SettingsPane />
-            ) : (
-              <section className="pane panel list-pane">{listPane}</section>
-            )}
-          </div>
-          {stackChat && (
-            <div className={`push-screen${chat ? "" : " leaving"}`} key={stackChat.id}>
-              <Conversation chat={stackChat} />
-            </div>
-          )}
-          {showInfo && <InfoPanel chat={chat} />}
+      <div className={`phone${chat ? " pushed" : ""}`}>
+        <div key={section} className="tab-screen">
+          {section === "settings" ? <SettingsPane /> : listPane}
         </div>
+        {stackChat && (
+          <div className={`push-screen${chat ? "" : " leaving"}`} key={stackChat.id}>
+            <Conversation chat={stackChat} />
+          </div>
+        )}
+        {stackInfo && (
+          <div className={`push-screen top${showInfo ? "" : " leaving"}`}>
+            <InfoPanel chat={stackInfo} />
+          </div>
+        )}
         <TabBar hidden={!!chat} />
         <OfflineBanner />
         <DeepLinks />
@@ -384,13 +302,13 @@ export function AppShell() {
   }
 
   return (
-    <div className="shell">
-      <NavPill />
-      <div
-        className={`window glass-window${wide ? "" : " no-sidebar"}${showInfo && section !== "settings" ? " info-open" : ""}`}
-      >
-        {wide && <Sidebar />}
-        <section className="pane list-pane">{listPane}</section>
+    <div className={`desk${showInfo && section !== "settings" ? " with-info" : ""}`}>
+      <Rail />
+      <section className="col-list">
+        {listPane}
+        <SidebarAd />
+      </section>
+      <main className="col-main">
         {section === "settings" ? (
           <SettingsPane />
         ) : chat ? (
@@ -398,9 +316,13 @@ export function AppShell() {
         ) : (
           <Welcome />
         )}
-        {showInfo && section !== "settings" && <InfoPanel chat={chat} />}
-        <OfflineBanner />
-      </div>
+      </main>
+      {showInfo && section !== "settings" && (
+        <aside className="col-info">
+          <InfoPanel chat={showInfo} />
+        </aside>
+      )}
+      <OfflineBanner />
       <DeepLinks />
       {callPhase !== "idle" && <CallView />}
     </div>

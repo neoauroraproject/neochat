@@ -75,18 +75,56 @@ export function Modal({
   sheet?: boolean;
 }) {
   const t = useApp((s) => s.lang);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ y: number; t: number } | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Drag the sheet down by its header; a quick flick dismisses regardless of distance.
+  const onHeadDown = (e: React.PointerEvent) => {
+    if (!sheet || !window.matchMedia("(max-width: 760px)").matches) return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { y: e.clientY, t: e.timeStamp };
+    sheetRef.current!.style.transition = "none";
+  };
+  const onHeadMove = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const dy = e.clientY - drag.current.y;
+    // Upward drags meet growing resistance instead of a hard stop.
+    const y = dy > 0 ? dy : -Math.sqrt(-dy) * 2;
+    sheetRef.current!.style.transform = `translateY(${y}px)`;
+  };
+  const onHeadUp = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const dy = e.clientY - drag.current.y;
+    const velocity = dy / Math.max(1, e.timeStamp - drag.current.t);
+    drag.current = null;
+    const el = sheetRef.current!;
+    el.style.transition = "transform 360ms cubic-bezier(0.32, 0.72, 0, 1)";
+    if (dy > 120 || velocity > 0.5) {
+      el.style.transform = "translateY(100%)";
+      setTimeout(onClose, 260);
+    } else el.style.transform = "translateY(0)";
+  };
+
   return createPortal(
     <div
       className={`overlay${sheet ? " sheet-overlay" : ""}`}
       onPointerDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className={`modal glass-float${wide ? " wide" : ""}`} role="dialog" aria-modal="true">
-        <div className="modal-head">
+      <div ref={sheetRef} className={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true">
+        <div
+          className="modal-head"
+          onPointerDown={onHeadDown}
+          onPointerMove={onHeadMove}
+          onPointerUp={onHeadUp}
+          onPointerCancel={onHeadUp}
+        >
+          <span className="sheet-grabber" />
           <h2>{title}</h2>
           <button
             className="icon-btn filled"
@@ -168,14 +206,13 @@ export function Menu({
   }, [onClose]);
   return createPortal(
     <div
-      className="overlay"
-      style={{ background: "transparent", animation: "none" }}
+      className="overlay menu-overlay"
       onPointerDown={(e) => e.target === e.currentTarget && onClose()}
       onContextMenu={(e) => e.preventDefault()}
     >
       <div
         ref={ref}
-        className="menu glass-float"
+        className="menu"
         style={{ left: pos.left, top: pos.top, transformOrigin: pos.origin }}
         role="menu"
       >
@@ -232,7 +269,7 @@ export function Toasts() {
   return (
     <div className="toasts" aria-live="polite">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast glass-float ${t.kind || ""}`}>
+        <div key={t.id} className={`toast ${t.kind || ""}`}>
           {t.text}
         </div>
       ))}
