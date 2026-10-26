@@ -23,12 +23,13 @@ Fonts (Vazirmatn), icons and sounds are all bundled, so nothing is fetched from 
 ## Install (Linux)
 
 ```bash
-sudo install -m 755 neochat-linux-amd64 /usr/local/bin/neochat
-sudo neochat -addr :443 -http-redirect :80 -data /var/lib/neochat
+curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 ```
 
 Then open `https://<server-ip>/`. The first visit shows the **setup wizard**, which creates the admin account.
-For a permanent service use [`deploy/binary/neochat.service`](../deploy/binary/neochat.service).
+[`install.sh`](../install.sh) picks the right binary, checks its SHA-256, and installs it as the `neochat`
+systemd service (same unit as [`deploy/binary/neochat.service`](../deploy/binary/neochat.service)).
+Run it again to upgrade; set `NEOCHAT_VERSION=v1.3.0` to pin a release.
 
 Open these ports in the firewall:
 

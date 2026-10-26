@@ -45,25 +45,24 @@ A private, Telegram-style messenger for your own server — shipped as a single 
 ## نصب در ۳۰ ثانیه
 
 ```bash
-curl -L -o neochat https://github.com/neoauroraproject/neochat/releases/latest/download/neochat-linux-amd64
-chmod +x neochat && sudo mv neochat /usr/local/bin/
-sudo neochat -addr :443 -http-redirect :80 -data /var/lib/neochat
+curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 ```
 
 آدرس `https://IP-سرور` را باز کنید؛ اولین بازدید، حساب مدیر را می‌سازد. پنل مدیریت در `/admin` است.
 
-- پورت‌ها: `443/tcp` (اپ و API) و `3478/udp+tcp` (رله تماس)
-- سرویس دائمی: [`deploy/binary/neochat.service`](deploy/binary/neochat.service)
+- همین دستور برای به‌روزرسانی هم هست؛ داده‌ها در `/var/lib/neochat` می‌مانند.
+- اسکریپت ([`install.sh`](install.sh)) معماری را تشخیص می‌دهد، checksum را چک می‌کند و سرویس systemd را راه می‌اندازد.
+- پورت‌ها: `443/tcp` (اپ و API)، `80/tcp` (ریدایرکت) و `3478/udp+tcp` (رله تماس)
 - ویندوز: `neochat-windows-amd64.exe` را اجرا کنید (پیش‌فرض `https://IP:8443`)
 
 > تماس فقط روی HTTPS کار می‌کند. گواهی خودامضا خودکار ساخته می‌شود؛ از **پنل مدیریت ← SSL** می‌توانید گواهی خودتان را آپلود کنید یا Let's Encrypt بگیرید، بدون ری‌استارت.
 
 ## Quick start (English)
 
-Download the binary for your platform from [Releases](https://github.com/neoauroraproject/neochat/releases/latest) and run it:
+On a Linux server (amd64/arm64), one command installs it as a service — run it again to upgrade:
 
 ```bash
-sudo neochat -addr :443 -http-redirect :80 -data /var/lib/neochat
+curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 ```
 
 Open `https://<server-ip>/` — the first visit creates the admin account. Everything else
