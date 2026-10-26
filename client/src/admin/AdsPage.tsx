@@ -270,7 +270,7 @@ function NetworkAds() {
           </>
         )}
       </dl>
-      {st.ads.map((a) => (
+      {(st.ads || []).map((a) => (
         <div
           key={a.id}
           className="switch-row"

@@ -213,6 +213,10 @@ func (n *netAdsClient) flushClicks() {
 func (n *netAdsClient) status() map[string]any {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	ads := n.state.Ads
+	if ads == nil {
+		ads = []netAd{} // the admin page lists these; never send null
+	}
 	return map[string]any{
 		"source":        n.base,
 		"product":       netAdsProduct,
@@ -221,7 +225,7 @@ func (n *netAdsClient) status() map[string]any {
 		"lastAttempt":   n.lastTry,
 		"lastError":     n.lastErr,
 		"pendingClicks": len(n.clickQueue),
-		"ads":           n.state.Ads,
+		"ads":           ads,
 	}
 }
 
