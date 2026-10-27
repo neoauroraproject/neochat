@@ -26,10 +26,25 @@ Fonts (Vazirmatn), icons and sounds are all bundled, so nothing is fetched from 
 curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 ```
 
-Then open `https://<server-ip>/`. The first visit shows the **setup wizard**, which creates the admin account.
-[`install.sh`](../install.sh) picks the right binary, checks its SHA-256, and installs it as the `neochat`
-systemd service (same unit as [`deploy/binary/neochat.service`](../deploy/binary/neochat.service)).
-Run it again to upgrade; set `NEOCHAT_VERSION=v1.3.0` to pin a release.
+The installer asks for the HTTPS port (443, or the first free of 8443, 2053, 2083, 2087, 2096, 9443), the HTTP
+redirect port (80, or `off` when it is taken) and the call relay port, then creates the admin account through
+the setup API and prints the address. It checks the binary's SHA-256, installs the `neochat` systemd service
+with its settings in `/etc/neochat/neochat.env`, and opens the ports in ufw or firewalld when they are active.
+
+It also installs `neochatctl` for later:
+
+```bash
+neochatctl                   # menu
+neochatctl update            # latest release (--version v1.3.0 to pick one); data is kept
+neochatctl config            # change ports and domain
+neochatctl status | logs | start | stop | restart
+neochatctl reset-password <user> [password]
+neochatctl uninstall         # asks before deleting data; --purge deletes it
+```
+
+Unattended install: `curl -fsSL .../install.sh | sudo bash -s -- install --port 8443 --http-port off --admin admin --password '...' -y`
+(see `neochatctl help` for every option). Without the installer, run the binary directly:
+`sudo neochat -addr :443 -http-redirect :80 -data /var/lib/neochat`.
 
 Open these ports in the firewall:
 

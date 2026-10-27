@@ -48,25 +48,34 @@ A private, Telegram-style messenger for your own server — shipped as a single 
 curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 ```
 
-آدرس `https://IP-سرور` را باز کنید؛ اولین بازدید، حساب مدیر را می‌سازد. پنل مدیریت در `/admin` است.
+نصب‌کننده پورت HTTPS، پورت ریدایرکت HTTP و پورت رله تماس را می‌پرسد (اگر پورتی مثل 443 گرفته باشد، پورت آزاد پیشنهاد می‌دهد)، حساب مدیر را می‌سازد و آدرس پنل را نشان می‌دهد. بعد از نصب، دستور `neochatctl` منوی مدیریت را باز می‌کند:
 
-- همین دستور برای به‌روزرسانی هم هست؛ داده‌ها در `/var/lib/neochat` می‌مانند.
-- اسکریپت ([`install.sh`](install.sh)) معماری را تشخیص می‌دهد، checksum را چک می‌کند و سرویس systemd را راه می‌اندازد.
-- پورت‌ها: `443/tcp` (اپ و API)، `80/tcp` (ریدایرکت) و `3478/udp+tcp` (رله تماس)
+| دستور                        | کار                                                 |
+| ---------------------------- | --------------------------------------------------- |
+| `neochatctl`                 | منو                                                 |
+| `neochatctl update`          | به‌روزرسانی به آخرین نسخه (داده‌ها می‌مانند)        |
+| `neochatctl config`          | تغییر پورت‌ها و دامنه                               |
+| `neochatctl status` / `logs` | وضعیت و لاگ                                         |
+| `neochatctl reset-password`  | تغییر رمز یک کاربر                                  |
+| `neochatctl uninstall`       | حذف (داده‌ها فقط با تأیید یا `--purge` پاک می‌شوند) |
+
+نصب بدون سؤال روی پورت دلخواه: `curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash -s -- install --port 8443 --admin admin -y`
+
 - ویندوز: `neochat-windows-amd64.exe` را اجرا کنید (پیش‌فرض `https://IP:8443`)
 
 > تماس فقط روی HTTPS کار می‌کند. گواهی خودامضا خودکار ساخته می‌شود؛ از **پنل مدیریت ← SSL** می‌توانید گواهی خودتان را آپلود کنید یا Let's Encrypt بگیرید، بدون ری‌استارت.
 
 ## Quick start (English)
 
-On a Linux server (amd64/arm64), one command installs it as a service — run it again to upgrade:
+On a Linux server (amd64/arm64), one command installs it as a service. It asks for the ports
+(suggesting free ones when 443 or 80 are taken) and creates the admin account:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 ```
 
-Open `https://<server-ip>/` — the first visit creates the admin account. Everything else
-(branding, registration, upload limits, SSL certificates, calls/TURN, ads, backups) is configured in `/admin`.
+Afterwards `neochatctl` opens a menu: update, change ports/domain, start/stop, logs, reset a password, uninstall.
+Everything else (branding, registration, upload limits, SSL certificates, calls/TURN, ads, backups) is in `/admin`.
 See the [full guide](docs/BINARY_EDITION.md) for flags, security notes and building from source.
 
 ## ساخت از سورس
