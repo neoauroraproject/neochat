@@ -31,19 +31,19 @@ redirect port (80, or `off` when it is taken) and the call relay port, then crea
 the setup API and prints the address. It checks the binary's SHA-256, installs the `neochat` systemd service
 with its settings in `/etc/neochat/neochat.env`, and opens the ports in ufw or firewalld when they are active.
 
-It also installs `neochatctl` for later:
+Afterwards the `neochat` command is the manager (the server binary moves to `/usr/local/lib/neochat/neochat`):
 
 ```bash
-neochatctl                   # menu
-neochatctl update            # latest release (--version v1.3.0 to pick one); data is kept
-neochatctl config            # change ports and domain
-neochatctl status | logs | start | stop | restart
-neochatctl reset-password <user> [password]
-neochatctl uninstall         # asks before deleting data; --purge deletes it
+neochat                   # menu
+neochat update            # latest release (--version v1.3.0 to pick one); data is kept
+neochat config            # change ports and domain
+neochat status | logs | start | stop | restart
+neochat reset-password <user> [password]
+neochat uninstall         # asks before deleting data; --purge deletes it
 ```
 
 Unattended install: `curl -fsSL .../install.sh | sudo bash -s -- install --port 8443 --http-port off --admin admin --password '...' -y`
-(see `neochatctl help` for every option). Without the installer, run the binary directly:
+(see `neochat help` for every option). Without the installer, run the binary directly:
 `sudo neochat -addr :443 -http-redirect :80 -data /var/lib/neochat`.
 
 Open these ports in the firewall:

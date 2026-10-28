@@ -4,15 +4,17 @@
 #   curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 #
 # The first run installs NeoChat (asks for ports and creates the admin account) and
-# leaves the `neochatctl` command behind. Run `neochatctl` for the menu, or pass a
+# leaves the `neochat` command behind. Run `neochat` for the menu, or pass a
 # command: install | update | config | uninstall | start | stop | restart | status |
-# logs | reset-password. Through the one-liner: ... | sudo bash -s -- update
+# logs | reset-password | make-admin | version. Through the one-liner: ... | sudo bash -s -- update
+# The server binary itself lives in /usr/local/lib/neochat/neochat.
 set -euo pipefail
 
 REPO="neoauroraproject/neochat"
 RAW="https://raw.githubusercontent.com/$REPO/main/install.sh"
-BIN=/usr/local/bin/neochat
-CTL=/usr/local/bin/neochatctl
+BIN=/usr/local/lib/neochat/neochat
+CTL=/usr/local/bin/neochat
+LEGACY_CTL=/usr/local/bin/neochatctl
 CONF_DIR=/etc/neochat
 ENV_FILE=$CONF_DIR/neochat.env
 UNIT=/etc/systemd/system/neochat.service
@@ -149,7 +151,7 @@ pick_port() {
       printf '%s' "$p"
       return
     fi
-    can_prompt || die "pick another $label with a flag (see: neochatctl help)"
+    can_prompt || die "pick another $label with a flag (see: neochat help)"
   done
 }
 
@@ -210,18 +212,30 @@ download_binary() {
 
 place_binary() {
   # Rename into place so a running binary is never overwritten.
+  mkdir -p "$(dirname "$BIN")"
   install -m 755 "$TMP/neochat" "$BIN.new"
   mv -f "$BIN.new" "$BIN"
 }
 
-# Keep a copy of this script as `neochatctl` for later updates and changes.
+# Keep a copy of this script as the `neochat` command for later updates and changes.
 install_ctl() {
   local self=${BASH_SOURCE[0]:-}
   if [ -n "$self" ] && [ -f "$self" ] && [ "$(readlink -f "$self")" != "$CTL" ]; then
     install -m 755 "$self" "$CTL"
   elif [ "$(readlink -f "$self" 2>/dev/null)" != "$CTL" ]; then
     fetch "$RAW" "$TMP/neochatctl" 2>/dev/null && install -m 755 "$TMP/neochatctl" "$CTL" ||
-      warn "could not save neochatctl; run the one-line installer again to manage NeoChat"
+      warn "could not save the neochat command; run the one-line installer again to manage NeoChat"
+  fi
+  rm -f "$LEGACY_CTL"
+}
+
+# Earlier installers put the server binary at /usr/local/bin/neochat; move it out of the way.
+migrate_legacy() {
+  [ "$(id -u)" -eq 0 ] || return 0
+  if [ -f "$CTL" ] && [ "$(head -c 2 "$CTL" 2>/dev/null)" != "#!" ] && [ ! -x "$BIN" ]; then
+    mkdir -p "$(dirname "$BIN")"
+    mv -f "$CTL" "$BIN"
+    [ -f "$UNIT" ] && sed -i "s#^ExecStart=$CTL#ExecStart=$BIN#" "$UNIT" && systemctl daemon-reload 2>/dev/null || true
   fi
 }
 
@@ -230,7 +244,7 @@ write_env() {
   local redirect=""
   [ "$HTTP_PORT" = off ] || redirect=":$HTTP_PORT"
   cat >"$ENV_FILE" <<EOF
-# NeoChat settings, read by the neochat service. Change them with: neochatctl config
+# NeoChat settings, read by the neochat service. Change them with: neochat config
 NEOCHAT_ADDR=:$HTTPS_PORT
 NEOCHAT_HTTP_REDIRECT=$redirect
 NEOCHAT_DATA=$DATA
@@ -241,7 +255,7 @@ EOF
 
 write_unit() {
   cat >"$UNIT" <<EOF
-# Written by neochatctl. Settings live in $ENV_FILE.
+# Written by the neochat installer. Settings live in $ENV_FILE.
 [Unit]
 Description=NeoChat self-hosted messenger
 After=network-online.target
@@ -301,7 +315,7 @@ service_start() {
   done
   printf '\n%sLast log lines:%s\n' "$C_B" "$C_0" >&2
   journalctl -u "$SERVICE" -n 15 --no-pager >&2 || true
-  die "NeoChat did not start on port $HTTPS_PORT (see the log above, or: neochatctl logs)"
+  die "NeoChat did not start on port $HTTPS_PORT (see the log above, or: neochat logs)"
 }
 
 # ---------------------------------------------------------------- setup
@@ -407,7 +421,7 @@ summary() {
   printf '  Data         %s\n' "$DATA"
   printf '  Ports        https %s, http redirect %s, call relay %s tcp+udp\n' "$HTTPS_PORT" "$HTTP_PORT" "${TURN_PORT:-3478}"
   printf '\n  The certificate is self-signed; get a real one in Admin > SSL.\n'
-  printf '  Manage it later with: %sneochatctl%s\n\n' "$C_B" "$C_0"
+  printf '  Open the manager any time with: %sneochat%s\n\n' "$C_B" "$C_0"
 }
 
 # ---------------------------------------------------------------- commands
@@ -417,7 +431,7 @@ cmd_install() {
   [ "$(uname -s)" = Linux ] || die "this installer is for Linux; download the Windows/macOS build from GitHub Releases"
   if installed && [ "$FORCE" != 1 ]; then
     warn "NeoChat is already installed ($(installed_version))."
-    printf '  Update: neochatctl update   Change ports: neochatctl config   Reinstall: neochatctl install --force\n'
+    printf '  Menu: neochat   Update: neochat update   Change ports: neochat config   Reinstall: neochat install --force\n'
     return
   fi
   has_systemd || die "systemd is required (run the binary by hand otherwise: neochat -addr :8443 -data $DEFAULT_DATA)"
@@ -502,7 +516,8 @@ cmd_uninstall() {
     rm -f "$UNIT"
     systemctl daemon-reload
   fi
-  rm -f "$BIN" "$BIN.new" "$ENV_FILE"
+  rm -f "$BIN" "$BIN.new" "$ENV_FILE" "$LEGACY_CTL"
+  rmdir "$(dirname "$BIN")" 2>/dev/null || true
   rmdir "$CONF_DIR" 2>/dev/null || true
   ok "removed the service and the binary"
   if [ "$PURGE" = 1 ] || confirm "Also delete ALL chats, media and accounts in $DATA? This cannot be undone" n; then
@@ -546,11 +561,21 @@ cmd_reset_password() {
   runuser -u neochat -- "$BIN" reset-password -data "$DATA" "$user" "$pass"
 }
 
+cmd_make_admin() {
+  need_root
+  installed || die "NeoChat is not installed"
+  load_config
+  local user=${1:-}
+  [ -n "$user" ] || user=$(ask "Username" "")
+  [ -n "$user" ] || die "a username is required"
+  runuser -u neochat -- "$BIN" make-admin -data "$DATA" "$user"
+}
+
 usage() {
   cat <<EOF
 NeoChat manager
 
-Usage: neochatctl [command] [options]
+Usage: neochat [command] [options]
 
 Commands:
   (none)            interactive menu
@@ -560,6 +585,8 @@ Commands:
   uninstall         remove NeoChat (--purge also deletes all data)
   start|stop|restart|status|logs
   reset-password    set a user's password: reset-password <user> [password]
+  make-admin        give a user admin rights: make-admin <user>
+  version           show the installed version
 
 Install options:
   --port N          HTTPS port (default: 443, or the first free of 8443, 2053, ...)
@@ -613,6 +640,8 @@ menu() {
 
 # ---------------------------------------------------------------- main
 
+migrate_legacy
+
 CMD=""
 POS=()
 while [ $# -gt 0 ]; do
@@ -630,7 +659,7 @@ while [ $# -gt 0 ]; do
     --purge) PURGE=1 ;;
     --force) FORCE=1 ;;
     -h | --help | help) CMD=help ;;
-    -*) die "unknown option $1 (see: neochatctl help)" ;;
+    -*) die "unknown option $1 (see: neochat help)" ;;
     *) if [ -z "$CMD" ]; then CMD=$1; else POS+=("$1"); fi ;;
   esac
   shift
@@ -646,7 +675,11 @@ case "$CMD" in
   start | stop | restart) need_root && systemctl "$CMD" "$SERVICE" && ok "$CMD done" ;;
   logs) journalctl -u "$SERVICE" -n 100 -f ;;
   reset-password) cmd_reset_password "${POS[@]+"${POS[@]}"}" ;;
+  make-admin) cmd_make_admin "${POS[@]+"${POS[@]}"}" ;;
+  version)
+    if [ -x "$BIN" ]; then "$BIN" version; else say "NeoChat is not installed"; fi
+    ;;
   menu) menu ;;
   help) usage ;;
-  *) die "unknown command $CMD (see: neochatctl help)" ;;
+  *) die "unknown command $CMD (see: neochat help)" ;;
 esac

@@ -48,16 +48,16 @@ A private, Telegram-style messenger for your own server — shipped as a single 
 curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 ```
 
-نصب‌کننده پورت HTTPS، پورت ریدایرکت HTTP و پورت رله تماس را می‌پرسد (اگر پورتی مثل 443 گرفته باشد، پورت آزاد پیشنهاد می‌دهد)، حساب مدیر را می‌سازد و آدرس پنل را نشان می‌دهد. بعد از نصب، دستور `neochatctl` منوی مدیریت را باز می‌کند:
+نصب‌کننده پورت HTTPS، پورت ریدایرکت HTTP و پورت رله تماس را می‌پرسد (اگر پورتی مثل 443 گرفته باشد، پورت آزاد پیشنهاد می‌دهد)، حساب مدیر را می‌سازد و آدرس پنل را نشان می‌دهد. بعد از نصب، دستور `neochat` منوی مدیریت را باز می‌کند:
 
-| دستور                        | کار                                                 |
-| ---------------------------- | --------------------------------------------------- |
-| `neochatctl`                 | منو                                                 |
-| `neochatctl update`          | به‌روزرسانی به آخرین نسخه (داده‌ها می‌مانند)        |
-| `neochatctl config`          | تغییر پورت‌ها و دامنه                               |
-| `neochatctl status` / `logs` | وضعیت و لاگ                                         |
-| `neochatctl reset-password`  | تغییر رمز یک کاربر                                  |
-| `neochatctl uninstall`       | حذف (داده‌ها فقط با تأیید یا `--purge` پاک می‌شوند) |
+| دستور                     | کار                                                 |
+| ------------------------- | --------------------------------------------------- |
+| `neochat`                 | منو                                                 |
+| `neochat update`          | به‌روزرسانی به آخرین نسخه (داده‌ها می‌مانند)        |
+| `neochat config`          | تغییر پورت‌ها و دامنه                               |
+| `neochat status` / `logs` | وضعیت و لاگ                                         |
+| `neochat reset-password`  | تغییر رمز یک کاربر                                  |
+| `neochat uninstall`       | حذف (داده‌ها فقط با تأیید یا `--purge` پاک می‌شوند) |
 
 نصب بدون سؤال روی پورت دلخواه: `curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash -s -- install --port 8443 --admin admin -y`
 
@@ -74,7 +74,7 @@ On a Linux server (amd64/arm64), one command installs it as a service. It asks f
 curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neochat/main/install.sh | sudo bash
 ```
 
-Afterwards `neochatctl` opens a menu: update, change ports/domain, start/stop, logs, reset a password, uninstall.
+Afterwards `neochat` opens a menu: update, change ports/domain, start/stop, logs, reset a password, uninstall.
 Everything else (branding, registration, upload limits, SSL certificates, calls/TURN, ads, backups) is in `/admin`.
 See the [full guide](docs/BINARY_EDITION.md) for flags, security notes and building from source.
 
