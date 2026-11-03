@@ -5,17 +5,16 @@ import { initials } from "../format";
 import { useApp } from "../store";
 import { Icon } from "./Icon";
 
-// Deterministic warm/cool gradient per id so avatars without photos are still recognizable.
-const palettes = [
-  ["#ff9f0a", "#ff6b3d"],
-  ["#5ac8fa", "#0a84ff"],
-  ["#30d158", "#0fae8f"],
-  ["#bf5af2", "#7d4cff"],
-  ["#ff375f", "#ff6b8b"],
-  ["#64d2ff", "#5e5ce6"],
-  ["#ffd60a", "#ff9f0a"],
-  ["#ac8e68", "#7a5c3c"],
-];
+// Deterministic pastel tile per id with the initials in a deeper shade of the same hue (like the
+// reference's teal "TS"). The theme decides lightness so the tiles stay soft in dark mode too.
+const hues = [168, 232, 44, 186, 8, 268, 140, 206];
+const tint = (id: number) => {
+  const h = hues[Math.abs(id) % hues.length];
+  return [
+    `hsl(${h} var(--avatar-s, 58%) var(--avatar-l, 91%))`,
+    `hsl(${h} 38% var(--avatar-ink-l, 36%))`,
+  ] as const;
+};
 
 export function Avatar({
   id = 0,
@@ -35,17 +34,14 @@ export function Avatar({
   icon?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const [a, b] = palettes[Math.abs(id) % palettes.length];
+  const [a, b] = tint(id);
   const showImg = media && !failed;
   return (
     <div
       className={`avatar${squircle ? " squircle" : ""}`}
       style={{ width: size, height: size, fontSize: size * 0.38 }}
     >
-      <div
-        className="face"
-        style={showImg ? undefined : { background: `linear-gradient(135deg, ${a}, ${b})` }}
-      >
+      <div className="face" style={showImg ? undefined : { background: a, color: b }}>
         {showImg ? (
           <img src={mediaUrl(media!, true)} alt="" loading="lazy" onError={() => setFailed(true)} />
         ) : icon ? (
@@ -331,6 +327,33 @@ export function SearchField({
         </button>
       )}
     </div>
+  );
+}
+
+/** Column header from the reference: a square soft button, the title, then a hairline under both. */
+export function ColHead({
+  title,
+  onBack,
+  backIcon = "back",
+  backLabel,
+  trailing,
+}: {
+  title: ReactNode;
+  onBack?: () => void;
+  backIcon?: "back" | "forward";
+  backLabel?: string;
+  trailing?: ReactNode;
+}) {
+  return (
+    <header className="col-head">
+      {onBack && (
+        <button className="sq-btn" onClick={onBack} aria-label={backLabel}>
+          <Icon name={backIcon} size={16} stroke={2} className="flip-rtl" />
+        </button>
+      )}
+      <h1>{title}</h1>
+      {trailing}
+    </header>
   );
 }
 

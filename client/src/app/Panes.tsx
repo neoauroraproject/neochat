@@ -2,13 +2,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { get } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
-import { Avatar, Empty, SearchField } from "../components/ui";
+import { Avatar, ColHead, Empty, SearchField } from "../components/ui";
 import { duration, listStamp } from "../format";
 import { useT } from "../i18n";
 import { useApp } from "../store";
 import type { CallEntry } from "../types";
 import { SearchResults, useLargeTitle } from "./ChatList";
-import { useContacts } from "./hooks";
+import { useContacts, useMobile } from "./hooks";
 
 /** A native screen: translucent bar with a title that appears once the large title scrolls away. */
 export function LargeTitleScreen({
@@ -23,6 +23,21 @@ export function LargeTitleScreen({
   children: ReactNode;
 }) {
   const { collapsed, onScroll } = useLargeTitle();
+  const t = useT();
+  const isMobile = useMobile();
+  if (!isMobile) {
+    return (
+      <div className={`screen${grouped ? " grouped" : ""}`}>
+        <ColHead
+          title={title}
+          onBack={() => useApp.setState({ section: "chats" })}
+          backLabel={t("common.back")}
+          trailing={trailing}
+        />
+        <div className="screen-scroll">{children}</div>
+      </div>
+    );
+  }
   return (
     <div className={`screen${grouped ? " grouped" : ""}${collapsed ? " collapsed" : ""}`}>
       <header className="navbar">

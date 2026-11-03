@@ -294,6 +294,7 @@ func (s *Server) routes() http.Handler {
 	h("PATCH /api/chats/{id}/members/{uid}", s.authed(s.handleUpdateMember))
 	h("DELETE /api/chats/{id}/members/{uid}", s.authed(s.handleRemoveMember))
 	h("GET /api/chats/{id}/messages", s.authed(s.handleListMessages))
+	h("GET /api/chats/{id}/shared", s.authed(s.handleShared))
 	h("POST /api/chats/{id}/messages", s.authed(s.handleSendMessage))
 	h("PATCH /api/messages/{id}", s.authed(s.handleEditMessage))
 	h("DELETE /api/messages/{id}", s.authed(s.handleDeleteMessage))

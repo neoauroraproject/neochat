@@ -9,45 +9,124 @@ import { useApp } from "../store";
 import type { Chat, Message } from "../types";
 
 const urlRe = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?])/g;
+const mentionRe = /(@[a-zA-Z][a-zA-Z0-9_]{3,31})/g;
 
+/** Links open in a new tab; @usernames are tinted with the accent like the reference's mentions. */
 function linkify(text: string): ReactNode[] {
   const parts = text.split(urlRe);
-  return parts.map((p, i) =>
-    i % 2 === 1 ? (
-      <a key={i} href={p} target="_blank" rel="noopener noreferrer">
-        {p}
-      </a>
-    ) : (
-      p
-    ),
+  return parts.flatMap((p, i) =>
+    i % 2 === 1
+      ? [
+          <a key={i} href={p} target="_blank" rel="noopener noreferrer">
+            {p}
+          </a>,
+        ]
+      : p.split(mentionRe).map((q, j) =>
+          j % 2 === 1 ? (
+            <span key={`${i}-${j}`} className="mention">
+              {q}
+            </span>
+          ) : (
+            q
+          ),
+        ),
   );
+}
+
+/** Swipe a bubble toward the inline start to reply; it follows the finger, ticks at the threshold, springs back. */
+function useSwipeReply(onReply: (() => void) | undefined) {
+  const ref = useRef<HTMLDivElement>(null);
+  const st = useRef<{ x0: number; y0: number; locked?: "x" | "y"; passed: boolean } | null>(null);
+  const rtl = typeof document !== "undefined" && document.documentElement.dir === "rtl";
+  const sign = rtl ? 1 : -1;
+  const TH = 64;
+  const paint = (dx: number, animate: boolean) => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.transition = animate ? "transform 360ms cubic-bezier(0.32, 0.72, 0, 1)" : "none";
+    el.style.transform = dx ? `translateX(${dx}px)` : "";
+    const p = Math.min(1, Math.abs(dx) / TH);
+    el.style.setProperty("--reply-p", String(p));
+    el.style.setProperty("--reply-dx", `${dx}px`);
+  };
+  if (!onReply) return { ref, handlers: {} };
+  return {
+    ref,
+    handlers: {
+      onPointerDown: (e: React.PointerEvent) => {
+        if (e.pointerType !== "touch") return;
+        st.current = { x0: e.clientX, y0: e.clientY, passed: false };
+      },
+      onPointerMove: (e: React.PointerEvent) => {
+        const s = st.current;
+        if (!s) return;
+        const dx = e.clientX - s.x0;
+        const dy = e.clientY - s.y0;
+        if (!s.locked) {
+          if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+          s.locked = Math.abs(dx) > Math.abs(dy) * 1.4 ? "x" : "y";
+          if (s.locked === "x") (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        }
+        if (s.locked !== "x") return;
+        let travel = sign * dx; // positive toward the inline start
+        if (travel < 0) travel = 0;
+        // resistance after the threshold, like a rubber band
+        const shown = travel <= TH ? travel : TH + (travel - TH) * 0.25;
+        paint(sign * shown, false);
+        const passed = travel >= TH;
+        if (passed !== s.passed) {
+          s.passed = passed;
+          if (passed) navigator.vibrate?.(8);
+        }
+      },
+      onPointerUp: () => {
+        const s = st.current;
+        st.current = null;
+        if (!s || s.locked !== "x") return;
+        paint(0, true);
+        if (s.passed) onReply();
+      },
+      onPointerCancel: () => {
+        st.current = null;
+        paint(0, true);
+      },
+    },
+  };
 }
 
 interface Props {
   m: Message;
   chat: Chat;
+  /** The run's last message, given to its first one so the meta line can show the run's ticks. */
+  tail?: Message;
   first: boolean;
   fresh?: boolean;
   last: boolean;
   onMenu: (m: Message, x: number, y: number) => void;
   onOpenMedia: (m: Message) => void;
   onJumpTo: (id: number) => void;
+  onReply?: (m: Message) => void;
 }
 
 export const MessageItem = memo(function MessageItem({
   m,
   chat,
+  tail,
   first,
   last,
   fresh,
   onMenu,
   onOpenMedia,
   onJumpTo,
+  onReply,
 }: Props) {
   const t = useT();
   const lang = useApp((s) => s.lang);
   const meId = useApp((s) => s.me?.id);
   const press = usePress((x, y) => onMenu(m, x, y));
+  const swipe = useSwipeReply(
+    onReply && m.id > 0 && m.kind !== "call" ? () => onReply(m) : undefined,
+  );
 
   if (m.kind === "system") return <div className="sys-msg">{systemText(m, lang)}</div>;
 
@@ -73,64 +152,91 @@ export const MessageItem = memo(function MessageItem({
     </span>
   );
 
+  // Desktop shows "Name, 12:04" above each run like the reference; phones keep the in-bubble stamp.
+  const end = tail || m;
+  const endRead = out && end.id > 0 && chat.othersReadId >= end.id;
+  const meta = first && (
+    <div className="msg-meta">
+      <bdi className="who">
+        {out ? t("common.you") : chat.type === "channel" ? chat.title : m.sender.displayName}
+      </bdi>
+      <span className="when">
+        {lang === "fa" ? "، " : ", "}
+        {timeOf(m.createdAt, lang)}
+        {m.editedAt ? ` · ${t("chat.edited")}` : ""}
+      </span>
+      {out &&
+        (end.failed ? (
+          <Icon name="alert" size={13} className="failed" />
+        ) : end.pending ? (
+          <Icon name="clock" size={12} />
+        ) : (
+          <Icon name={endRead ? "checks" : "check"} size={14} className={endRead ? "read" : ""} />
+        ))}
+    </div>
+  );
+
   return (
     <div
       className={`msg ${out ? "out" : "in"}${first ? " first" : ""}${last ? " last" : ""}${fresh ? " fresh" : ""}`}
       data-id={m.id}
+      ref={swipe.ref}
+      {...swipe.handlers}
       {...press}
       onClick={m.failed ? () => onMenu(m, 0, 0) : undefined}
     >
+      <span className="reply-hint" aria-hidden="true">
+        <Icon name="reply" size={20} />
+      </span>
       {showAvatar && (
         <div className="avatar-slot">
           {last && (
-            <Avatar id={m.senderId} name={m.sender.displayName} media={m.sender.avatar} size={34} />
+            <Avatar id={m.senderId} name={m.sender.displayName} media={m.sender.avatar} size={30} />
           )}
         </div>
       )}
-      <div className={`bubble${mediaOnly ? " media-only" : ""}`}>
-        {showSender && (
-          <div className="sender" style={{ color: senderColor(m.senderId) }}>
-            {m.sender.displayName}
-          </div>
-        )}
-        {m.reply && (
-          <button
-            className="reply-quote"
-            onClick={() => onJumpTo(m.reply!.id)}
-            style={{ color: out ? "#fff" : "var(--accent)" }}
-          >
-            <b>{m.reply.senderName}</b>
-            <span>{m.reply.text || t("chat.photo")}</span>
-          </button>
-        )}
-        {m.kind === "call" ? (
-          <CallBubble m={m} chat={chat} out={m.senderId === meId} />
-        ) : (
-          <MediaContent m={m} onOpen={() => onOpenMedia(m)} />
-        )}
-        {m.text && m.kind !== "call" && <div className="text">{linkify(m.text)}</div>}
-        {m.failed && (
-          <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 2 }}>
-            {t("chat.failed")}
-          </div>
-        )}
-        {stamp}
+      <div className="msg-col">
+        {meta}
+        <div
+          className={`bubble${mediaOnly ? " media-only" : ""}`}
+          title={timeOf(m.createdAt, lang)}
+        >
+          {showSender && (
+            <div className="sender" style={{ ["--h" as string]: senderHue(m.senderId) }}>
+              {m.sender.displayName}
+            </div>
+          )}
+          {m.reply && (
+            <button
+              className="reply-quote"
+              onClick={() => onJumpTo(m.reply!.id)}
+              style={{ color: out ? "#fff" : "var(--accent)" }}
+            >
+              <b>{m.reply.senderName}</b>
+              <span>{m.reply.text || t("chat.photo")}</span>
+            </button>
+          )}
+          {m.kind === "call" ? (
+            <CallBubble m={m} chat={chat} out={m.senderId === meId} />
+          ) : (
+            <MediaContent m={m} onOpen={() => onOpenMedia(m)} />
+          )}
+          {m.text && m.kind !== "call" && <div className="text">{linkify(m.text)}</div>}
+          {m.failed && (
+            <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 2 }}>
+              {t("chat.failed")}
+            </div>
+          )}
+          {stamp}
+        </div>
       </div>
     </div>
   );
 });
 
-const senderColors = [
-  "#ff9f0a",
-  "#64d2ff",
-  "#30d158",
-  "#bf5af2",
-  "#ff6b8b",
-  "#ffd60a",
-  "#5e9cff",
-  "#ff8a65",
-];
-const senderColor = (id: number) => senderColors[id % senderColors.length];
+// Sender names get a hue only; saturation/lightness come from the theme so they stay calm and readable.
+const senderHues = [28, 150, 196, 258, 318, 344, 212, 80];
+const senderHue = (id: number) => senderHues[Math.abs(id) % senderHues.length];
 
 function MediaContent({ m, onOpen }: { m: Message; onOpen: () => void }) {
   const t = useT();

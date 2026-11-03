@@ -22,9 +22,7 @@
   inset: 0;
   z-index: 120;
   padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
-  background:
-    linear-gradient(var(--window), var(--window)),
-    #1f1915 url("/scene-blur.jpg") center / cover no-repeat;
+  background: var(--page);
   animation: call-in 420ms var(--ease-out);
 }
 @keyframes call-in {
@@ -138,7 +136,7 @@
 .cp-portrait .avatar {
   position: relative;
   z-index: 1;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 50px rgba(23, 32, 64, 0.18);
 }
 .cp-portrait .avatar,
 .cp-portrait .avatar .face {
@@ -152,7 +150,7 @@
   width: 140px;
   height: 140px;
   border-radius: 36%;
-  border: 2px solid rgba(255, 255, 255, 0.45);
+  border: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   opacity: 0;
 }
 .cp-portrait.ringing i {
@@ -173,12 +171,12 @@
 }
 .cp-center h2 {
   margin: 0;
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 .cp-state {
-  font-size: 18px;
+  font-size: 16px;
   color: var(--label-2);
   font-variant-numeric: tabular-nums;
   min-height: 24px;
@@ -193,11 +191,9 @@
   gap: 8px;
   padding: 8px;
   margin: 0 16px 22px;
-  border-radius: 999px;
-  background: var(--fill);
-  border: 1px solid var(--card-edge);
-  backdrop-filter: var(--material-thin);
-  -webkit-backdrop-filter: var(--material-thin);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(23, 32, 64, 0.1);
 }
 .call-panel.full .cp-pill {
   margin-bottom: calc(26px + env(safe-area-inset-bottom, 0px));
@@ -205,10 +201,10 @@
 .cp-btn {
   width: 48px;
   height: 48px;
-  border-radius: 50%;
+  border-radius: 13px;
   display: grid;
   place-items: center;
-  color: inherit;
+  color: var(--label-2);
   transition:
     transform 140ms var(--spring),
     background-color 200ms ease,
@@ -218,13 +214,13 @@
   transform: scale(0.88);
 }
 .cp-btn.on {
-  background: rgba(255, 255, 255, 0.92);
-  color: #1c1714;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .cp-btn.end {
-  background: #ff3b30;
+  background: var(--danger);
   color: #fff;
-  box-shadow: 0 8px 22px rgba(255, 59, 48, 0.45);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--danger) 35%, transparent);
 }
 @media (hover: hover) and (pointer: fine) {
   .cp-btn:not(.on):not(.end):hover {
@@ -264,12 +260,12 @@
   transform: scale(0.9);
 }
 .cp-big.decline svg {
-  background: #ff3b30;
-  box-shadow: 0 10px 28px rgba(255, 59, 48, 0.45);
+  background: var(--danger);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--danger) 35%, transparent);
 }
 .cp-big.accept svg {
-  background: #30d158;
-  box-shadow: 0 10px 28px rgba(48, 209, 88, 0.45);
+  background: var(--accent);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 35%, transparent);
   animation: nudge 1.6s var(--ease-out) infinite;
 }
 @keyframes nudge {
@@ -346,11 +342,11 @@
   gap: 10px;
   padding: 9px 18px;
   border-radius: 999px;
-  background: #30d158;
+  background: var(--accent);
   color: #fff;
   font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 10px 30px rgba(48, 209, 88, 0.4);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 35%, transparent);
   animation: mini-in 380ms var(--spring);
   cursor: pointer;
   white-space: nowrap;
@@ -366,4 +362,15 @@
     transform: translate(-50%, -30px) scale(0.9);
     opacity: 0;
   }
+}
+.call-panel.embedded {
+  background: var(--panel);
+}
+.call-panel.video .cp-pill {
+  background: rgba(21, 23, 42, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.call-panel.video .cp-btn {
+  color: #fff;
 }

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { adHref, adsFor, adTarget, trackImpression } from "../ads";
 import { get, mediaUrl } from "../api";
 import { Icon } from "../components/Icon";
 import {
   Avatar,
+  ColHead,
   Empty,
   Menu,
   SearchField,
@@ -15,7 +16,8 @@ import { chatTitle, listStamp, num, preview } from "../format";
 import { useT } from "../i18n";
 import { sortedChats, useApp, type Filter } from "../store";
 import type { Ad, Chat, RoomPreview, User } from "../types";
-import { useContacts, useMedia, useMobile, useTick } from "./hooks";
+import { useContacts, useMobile, useTick } from "./hooks";
+import { askRemoveChat } from "./chatActions";
 import { useNewMenu } from "./NewMenu";
 import { RoomPreviewModal } from "./RoomPreviewModal";
 
@@ -42,6 +44,40 @@ export function useLargeTitle() {
   return { collapsed, onScroll };
 }
 
+/** FLIP: rows that change position (a chat jumping to the top) glide there instead of teleporting. */
+function useFlip(resetKey: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  const prev = useRef(new Map<string, number>());
+  const key = useRef(resetKey);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (key.current !== resetKey) {
+      key.current = resetKey;
+      prev.current = new Map();
+    }
+    const next = new Map<string, number>();
+    el.querySelectorAll<HTMLElement>(":scope > .cell-wrap[data-id]").forEach((n) => {
+      const id = n.dataset.id!;
+      const top = n.offsetTop;
+      next.set(id, top);
+      const old = prev.current.get(id);
+      if (
+        old !== undefined &&
+        old !== top &&
+        !matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        n.animate([{ transform: `translateY(${old - top}px)` }, { transform: "translateY(0)" }], {
+          duration: 380,
+          easing: "cubic-bezier(0.32, 0.72, 0, 1)",
+        });
+      }
+    });
+    prev.current = next;
+  });
+  return ref;
+}
+
 export function ChatList() {
   const t = useT();
   const lang = useApp((s) => s.lang);
@@ -52,6 +88,7 @@ export function ChatList() {
   const newMenu = useNewMenu();
   const isMobile = useMobile();
   const { collapsed, onScroll } = useLargeTitle();
+  const cellsRef = useFlip(filter);
   useTick(60_000);
 
   const list = useMemo(
@@ -70,7 +107,6 @@ export function ChatList() {
 
   const title = filter === "archive" ? t("nav.archive") : t("nav.chats");
   const me = useApp((s) => s.me);
-  const narrow = !useMedia("(min-width: 1180px)");
   const compose = (
     <button
       className="glass-circle"
@@ -81,64 +117,202 @@ export function ChatList() {
     </button>
   );
 
+  const rows = (
+    <>
+      <div className="cells" ref={cellsRef}>
+        {list.map((c) => (
+          <ChatRow key={c.id} chat={c} />
+        ))}
+      </div>
+      {loaded && list.length === 0 && (
+        <Empty icon="chat" title={t("list.empty")} text={t("list.emptyHint")}>
+          <button
+            className="btn btn-primary"
+            style={{ marginTop: 14 }}
+            onClick={() => useApp.setState({ section: "explore" })}
+          >
+            {t("nav.explore")}
+          </button>
+        </Empty>
+      )}
+      {!loaded && list.length === 0 && (
+        <div className="empty">
+          <span className="spinner" />
+        </div>
+      )}
+    </>
+  );
+
+  if (!isMobile) {
+    const back = () => {
+      const s = useApp.getState();
+      if (s.filter !== "all") useApp.setState({ filter: "all" });
+      else if (s.activeChatId) s.openChat(null);
+    };
+    return (
+      <div className="screen list-screen">
+        <ColHead title={title} onBack={back} backLabel={t("common.back")} />
+        <div className="screen-scroll">
+          <MeBlock />
+          <div className="search-row">
+            <SearchField value={q} onChange={setQ} placeholder={t("list.search")} />
+          </div>
+          {query ? (
+            <SearchResults query={query} local={local} />
+          ) : (
+            <>
+              <ListHead onNew={(el) => newMenu.open(el)} />
+              {filter === "all" && <AdBanner />}
+              {rows}
+            </>
+          )}
+        </div>
+        {newMenu.element}
+      </div>
+    );
+  }
+
   return (
     <div className={`screen list-screen${collapsed ? " collapsed" : ""}`}>
-      {isMobile && (
-        <header className="m-top">
-          {filter === "archive" ? (
-            <button className="glass-circle" onClick={() => useApp.setState({ filter: "all" })}>
-              <Icon name="back" size={22} className="flip-rtl" />
-            </button>
-          ) : (
-            <button
-              className="glass-circle avatar-btn"
-              onClick={() => useApp.setState({ section: "settings" })}
-              aria-label={t("nav.settings")}
-            >
-              {me && <Avatar id={me.id} name={me.displayName} media={me.avatar} size={38} />}
-            </button>
-          )}
-          <div className="m-title">{title}</div>
-          {compose}
-        </header>
-      )}
+      <header className="m-top">
+        {filter === "archive" ? (
+          <button className="glass-circle" onClick={() => useApp.setState({ filter: "all" })}>
+            <Icon name="back" size={22} className="flip-rtl" />
+          </button>
+        ) : (
+          <button
+            className="glass-circle avatar-btn"
+            onClick={() => useApp.setState({ section: "settings" })}
+            aria-label={t("nav.settings")}
+          >
+            {me && <Avatar id={me.id} name={me.displayName} media={me.avatar} size={38} />}
+          </button>
+        )}
+        <div className="m-title">{title}</div>
+        {compose}
+      </header>
       <div className="screen-scroll" onScroll={onScroll}>
         <div className="search-row">
           <SearchField value={q} onChange={setQ} placeholder={t("list.search")} />
-          {!isMobile && compose}
         </div>
-        {!query && (isMobile || narrow || filter === "archive") && <FolderTabs />}
+        {!query && <FolderTabs />}
         {query ? (
           <SearchResults query={query} local={local} />
         ) : (
           <>
             {filter === "all" && <Stories />}
             {filter === "all" && <AdBanner />}
-            <div className="cells">
-              {list.map((c) => (
-                <ChatRow key={c.id} chat={c} />
-              ))}
-            </div>
-            {loaded && list.length === 0 && (
-              <Empty icon="chat" title={t("list.empty")} text={t("list.emptyHint")}>
-                <button
-                  className="btn btn-primary"
-                  style={{ marginTop: 14 }}
-                  onClick={() => useApp.setState({ section: "explore" })}
-                >
-                  {t("nav.explore")}
-                </button>
-              </Empty>
-            )}
-            {!loaded && list.length === 0 && (
-              <div className="empty">
-                <span className="spinner" />
-              </div>
-            )}
+            {rows}
           </>
         )}
       </div>
       {newMenu.element}
+    </div>
+  );
+}
+
+/** The signed-in person at the top of the list column: photo, name and a status pill with account actions. */
+function MeBlock() {
+  const t = useT();
+  const me = useApp((s) => s.me)!;
+  const connected = useApp((s) => s.connected);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const items: MenuItem[] = [
+    {
+      icon: "settings",
+      label: t("nav.settings"),
+      onClick: () => useApp.setState({ section: "settings" }),
+    },
+    {
+      icon: "dashboard",
+      label: t("nav.admin"),
+      onClick: () => location.assign("/admin"),
+      hidden: !me.isAdmin,
+    },
+    {
+      icon: "logout",
+      label: t("me.logout"),
+      danger: true,
+      onClick: () => useApp.getState().logout(),
+    },
+  ];
+  return (
+    <div className="me-block">
+      <button
+        className="me-gear"
+        onClick={() => useApp.setState({ section: "settings" })}
+        aria-label={t("nav.settings")}
+      >
+        <Icon name="settings" size={17} />
+      </button>
+      <button className="me-photo" onClick={() => useApp.setState({ section: "settings" })}>
+        <Avatar id={me.id} name={me.displayName} media={me.avatar} size={104} online={connected} />
+      </button>
+      <div className="me-name">{me.displayName}</div>
+      <button
+        className={`me-status${connected ? "" : " off"}`}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenu({ x: r.left, y: r.bottom + 6 });
+        }}
+      >
+        {connected ? t("me.available") : t("common.connecting")}
+        <Icon name="down" size={13} stroke={2.2} />
+      </button>
+      {menu && <Menu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}
+    </div>
+  );
+}
+
+/** "Last chats" with the new-chat button and a menu that switches between folders. */
+function ListHead({ onNew }: { onNew: (anchor: HTMLElement) => void }) {
+  const t = useT();
+  const filter = useApp((s) => s.filter);
+  const chats = useApp((s) => s.chats);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const archived = Object.values(chats).some((c) => c.archived);
+  const folders: { id: Filter; icon: string; label: string }[] = [
+    { id: "all", icon: "chat", label: t("nav.all") },
+    { id: "direct", icon: "users", label: t("nav.direct") },
+    { id: "groups", icon: "group", label: t("nav.groups") },
+    { id: "channels", icon: "megaphone", label: t("nav.channels") },
+    { id: "unread", icon: "bell", label: t("nav.unread") },
+    ...(archived ? [{ id: "archive" as Filter, icon: "archive", label: t("nav.archive") }] : []),
+  ];
+  const label =
+    filter === "all" ? t("list.lastChats") : folders.find((f) => f.id === filter)?.label;
+  return (
+    <div className="list-head">
+      <span className="lbl">{label}</span>
+      <button
+        className="add-btn"
+        onClick={(e) => onNew(e.currentTarget)}
+        aria-label={t("list.newChat")}
+      >
+        <Icon name="plus" size={16} stroke={2.2} />
+      </button>
+      <button
+        className="kebab"
+        aria-label={t("nav.all")}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenu({ x: r.right, y: r.bottom + 4 });
+        }}
+      >
+        <Icon name="more-v" size={18} stroke={2.4} />
+      </button>
+      {menu && (
+        <Menu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={folders.map((f) => ({
+            icon: f.id === filter ? "check" : f.icon,
+            label: f.label,
+            onClick: () => useApp.setState({ filter: f.id }),
+          }))}
+        />
+      )}
     </div>
   );
 }
@@ -257,20 +431,42 @@ function AdBanner() {
 // Only one row is swiped open at a time, like UITableView.
 let closeOpenRow: (() => void) | null = null;
 
-/** Horizontal swipe on touch reveals row actions; vertical movement keeps scrolling the list. */
-function useSwipe(width: number) {
-  const [x, setX] = useState(0);
-  const [dragging, setDragging] = useState(false);
+/**
+ * Horizontal swipe (touch) reveals icon actions at the inline end; a long swipe past the actions runs the
+ * primary one. The row follows the finger through direct style writes (no re-render per frame) and settles
+ * with the velocity it was released at. Vertical movement keeps scrolling the list.
+ */
+function useSwipe(width: number, onFull: () => void) {
+  const ref = useRef<HTMLElement | null>(null);
+  const x = useRef(0);
+  const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const armedRef = useRef(false);
   const st = useRef<{ x0: number; y0: number; base: number; t: number; locked?: "x" | "y" } | null>(
     null,
   );
   const rtl = typeof document !== "undefined" && document.documentElement.dir === "rtl";
   const sign = rtl ? 1 : -1; // actions sit at the inline end; content moves toward the inline start
-  const close = () => setX(0);
+
+  const apply = (v: number, animate: boolean) => {
+    x.current = v;
+    const el = ref.current;
+    if (el) {
+      el.style.transition = animate ? "" : "none";
+      el.style.transform = v ? `translateX(${v}px)` : "";
+    }
+    setOpen(v !== 0);
+  };
+  const close = () => {
+    armedRef.current = false;
+    setArmed(false);
+    apply(0, true);
+  };
+
   const handlers = {
     onPointerDown: (e: React.PointerEvent) => {
       if (e.pointerType !== "touch") return;
-      st.current = { x0: e.clientX, y0: e.clientY, base: x, t: e.timeStamp };
+      st.current = { x0: e.clientX, y0: e.clientY, base: x.current, t: e.timeStamp };
     },
     onPointerMove: (e: React.PointerEvent) => {
       const s = st.current;
@@ -283,30 +479,44 @@ function useSwipe(width: number) {
         if (s.locked === "x") {
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           if (closeOpenRow && closeOpenRow !== close) closeOpenRow();
-          setDragging(true);
         }
       }
       if (s.locked !== "x") return;
       let next = s.base + dx;
-      const max = width * Math.abs(sign);
-      // Past the actions the row follows with rubber-band resistance.
-      const over = sign * next - max;
-      if (over > 0) next = sign * (max + over * 0.25);
-      if (sign * next < 0) next = next * 0.25;
-      setX(next);
+      const travel = sign * next; // positive = revealing the actions
+      if (travel < 0) next = next * 0.25; // dragging the wrong way resists
+      apply(next, false);
+      // reachable on any screen: a little past the actions, or most of the row, whichever is larger
+      const fullAt = Math.max(width + 48, (ref.current?.offsetWidth ?? 360) * 0.78);
+      const isArmed = travel > fullAt;
+      if (isArmed !== armedRef.current) {
+        armedRef.current = isArmed;
+        setArmed(isArmed);
+        navigator.vibrate?.(8);
+      }
     },
     onPointerUp: (e: React.PointerEvent) => {
       const s = st.current;
       st.current = null;
       if (!s || s.locked !== "x") return;
-      setDragging(false);
-      const v = (e.clientX - s.x0) / Math.max(1, e.timeStamp - s.t);
-      const open = sign * v > 0.3 || (sign * v > -0.3 && sign * x > width / 2);
-      setX(open ? sign * width : 0);
-      if (open) closeOpenRow = close;
+      if (armedRef.current) {
+        // fly the row out, then run the primary action
+        apply(sign * window.innerWidth, true);
+        setTimeout(() => {
+          onFull();
+          close();
+        }, 220);
+        return;
+      }
+      const v = (e.clientX - s.x0) / Math.max(1, e.timeStamp - s.t); // px per ms
+      const travel = sign * x.current;
+      const projected = travel + sign * v * 220; // where the flick would come to rest
+      const shouldOpen = projected > width * 0.5;
+      apply(shouldOpen ? sign * width : 0, true);
+      if (shouldOpen) closeOpenRow = close;
     },
   };
-  return { x, dragging, close, handlers, isOpen: x !== 0 };
+  return { ref, open, armed, close, handlers };
 }
 
 export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean }) {
@@ -319,7 +529,7 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
   const isMobile = useMobile();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const press = usePress((x, y) => setMenu({ x, y }));
-  const swipe = useSwipe(216);
+  const swipe = useSwipe(256, () => useApp.getState().setPrefs(c.id, { archived: !c.archived }));
   const title = chatTitle(c, lang);
   const lm = c.lastMessage;
   const typers = Object.entries(typing || {}).filter(([, v]) => v.until > Date.now());
@@ -382,6 +592,17 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
       label: c.archived ? t("list.unarchive") : t("list.archive"),
       onClick: () => prefs(c.id, { archived: !c.archived }),
     },
+    {
+      icon: "trash",
+      label:
+        c.type === "direct"
+          ? t("list.deleteChat")
+          : c.role === "owner"
+            ? t("room.delete")
+            : t("room.leave"),
+      danger: true,
+      onClick: () => askRemoveChat(c),
+    },
   ];
   const act = (fn: () => void) => () => {
     swipe.close();
@@ -390,31 +611,31 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
 
   const read = !!(mine && lm && c.othersReadId >= lm.id);
   return (
-    <div className={`cell-wrap${compact ? " compact" : ""}${swipe.x !== 0 ? " swiping" : ""}`}>
+    <div
+      className={`cell-wrap${compact ? " compact" : ""}${swipe.open ? " swiping" : ""}`}
+      data-id={c.id}
+    >
       {isMobile && !compact && (
-        <div className="swipe-actions" aria-hidden={!swipe.isOpen}>
-          <button className="sa pin" onClick={act(items[0].onClick)}>
-            <Icon name="pin" size={22} />
-            <span>{items[0].label}</span>
+        <div className={`swipe-actions${swipe.armed ? " armed" : ""}`} aria-hidden={!swipe.open}>
+          <button className="sa" onClick={act(items[0].onClick)} aria-label={items[0].label}>
+            <Icon name="pin" size={22} filled={c.pinned} />
           </button>
-          <button className="sa mute" onClick={act(items[1].onClick)}>
+          <button className="sa" onClick={act(items[1].onClick)} aria-label={items[1].label}>
             <Icon name={items[1].icon} size={22} />
-            <span>{items[1].label}</span>
           </button>
-          <button className="sa archive" onClick={act(items[2].onClick)}>
+          <button className="sa full" onClick={act(items[2].onClick)} aria-label={items[2].label}>
             <Icon name="archive" size={22} />
-            <span>{items[2].label}</span>
+          </button>
+          <button className="sa del" onClick={act(items[3].onClick)} aria-label={items[3].label}>
+            <Icon name="trash" size={22} />
           </button>
         </div>
       )}
       <button
         className={`chat-cell${c.unread > 0 && !c.muted ? " unread" : ""}${c.pinned ? " pinned" : ""}`}
         aria-current={active}
-        style={{
-          transform: swipe.x ? `translateX(${swipe.x}px)` : undefined,
-          transition: swipe.dragging ? "none" : undefined,
-        }}
-        onClick={() => (swipe.isOpen ? swipe.close() : useApp.getState().openChat(c.id))}
+        ref={swipe.ref as React.Ref<HTMLButtonElement>}
+        onClick={() => (swipe.open ? swipe.close() : useApp.getState().openChat(c.id))}
         {...(isMobile ? swipe.handlers : {})}
         {...press}
       >
@@ -433,20 +654,20 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
             <span className="title">{title}</span>
             {c.muted && <Icon name="bell-off" size={13} className="kind" />}
             {c.pinned && <Icon name="pin" size={13} className="kind" />}
+            <span className="time">{listStamp(c.lastMessageAt, lang)}</span>
           </span>
           <span className="line2">
             <span className="sub">{sub}</span>
-            <span className="dot-time">· {listStamp(c.lastMessageAt, lang)}</span>
+            <span className="trail">
+              {c.unread > 0 ? (
+                <span className={`badge${c.muted ? " muted" : ""}`}>{num(c.unread, lang)}</span>
+              ) : read && c.peer && !c.saved ? (
+                <Icon name="checks" size={15} className="tick read" />
+              ) : mine ? (
+                <Icon name={read ? "checks" : "check"} size={15} className="tick" />
+              ) : null}
+            </span>
           </span>
-        </span>
-        <span className="trail">
-          {c.unread > 0 ? (
-            <span className={`badge${c.muted ? " muted" : ""}`}>{num(c.unread, lang)}</span>
-          ) : read && c.peer && !c.saved ? (
-            <Avatar id={c.peer.id} name={title} media={c.peer.avatar} size={16} />
-          ) : mine ? (
-            <Icon name={read ? "checks" : "check"} size={16} className="tick" />
-          ) : null}
         </span>
       </button>
       {menu && <Menu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}

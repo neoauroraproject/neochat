@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { del, get, mediaUrl, patch, post, upload } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
-import { Avatar, Menu, Modal, pickFile, type MenuItem } from "../components/ui";
+import { Avatar, ColHead, Menu, Modal, pickFile, type MenuItem } from "../components/ui";
 import { chatTitle, num, presenceText } from "../format";
 import { errorText, useT } from "../i18n";
 import { useApp } from "../store";
 import type { Chat, Member, Message, User } from "../types";
 import { useMobile } from "./hooks";
+import { askRemoveChat } from "./chatActions";
 import { MediaViewer } from "./MediaViewer";
 import { MemberPicker } from "./NewRoomModal";
 
@@ -17,23 +18,12 @@ export function InfoPanel({ chat }: { chat: Chat }) {
   const config = useApp((s) => s.config);
   const messages = useApp((s) => s.messages[chat.id]);
   const isMobile = useMobile();
-  const [members, setMembers] = useState<Member[] | null>(null);
-  const [memberMenu, setMemberMenu] = useState<{ m: Member; x: number; y: number } | null>(null);
-  const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
   const [viewer, setViewer] = useState<Message | null>(null);
   const admin = chat.role === "owner" || chat.role === "admin";
   const isRoom = chat.type !== "direct";
   const title = chatTitle(chat, lang);
   const close = () => useApp.setState({ infoOpen: false });
-
-  const loadMembers = () => {
-    if (isRoom && (chat.type === "group" || admin))
-      get<Member[]>(`/api/chats/${chat.id}/members`)
-        .then(setMembers)
-        .catch(() => setMembers(null));
-  };
-  useEffect(loadMembers, [chat.id, chat.memberCount, admin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const media = (messages || [])
     .filter((m) => m.kind === "image" && m.media?.id)
@@ -55,51 +45,34 @@ export function InfoPanel({ chat }: { chat: Chat }) {
     }
   };
 
-  const leave = () =>
-    confirm(t("common.confirm")) &&
-    act(async () => {
-      await post(`/api/chats/${chat.id}/leave`);
-      useApp.getState().removeChat(chat.id);
-      close();
-    });
-
-  const remove = () =>
-    confirm(t("common.confirm")) &&
-    act(async () => {
-      await del(`/api/chats/${chat.id}`);
-      useApp.getState().removeChat(chat.id);
-      close();
-    });
-
-  const memberItems = (m: Member): MenuItem[] => [
-    {
-      icon: "chat",
-      label: t("explore.message"),
-      onClick: () => useApp.getState().openDirect(m.user.id),
-    },
-    {
-      icon: "shield",
-      label: m.role === "admin" ? t("room.removeAdmin") : t("room.makeAdmin"),
-      onClick: () =>
-        act(() =>
-          patch(`/api/chats/${chat.id}/members/${m.user.id}`, {
-            role: m.role === "admin" ? "member" : "admin",
-          }).then(loadMembers),
-        ),
-      hidden: chat.role !== "owner" || m.role === "owner",
-    },
-    {
-      icon: "trash",
-      label: t("room.remove"),
-      danger: true,
-      onClick: () => act(() => del(`/api/chats/${chat.id}/members/${m.user.id}`).then(loadMembers)),
-      hidden: !admin || m.role === "owner" || (m.role === "admin" && chat.role !== "owner"),
-    },
-  ];
+  const leave = () => askRemoveChat(chat, close);
+  const remove = () => askRemoveChat(chat, close);
 
   return (
     <aside className="pane panel info-pane">
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 10px 0" }}>
+      {!isMobile && (
+        <ColHead
+          title={t("shared.details")}
+          onBack={close}
+          backLabel={t("common.back")}
+          trailing={
+            isRoom &&
+            admin && (
+              <button
+                className="sq-btn ghost"
+                onClick={() => setEditing(true)}
+                aria-label={t("room.editInfo")}
+              >
+                <Icon name="edit" size={16} />
+              </button>
+            )
+          }
+        />
+      )}
+      <div
+        className="info-top"
+        style={{ display: "flex", justifyContent: "space-between", padding: "10px 10px 0" }}
+      >
         <button className="icon-btn" onClick={close} aria-label={t("common.close")}>
           <Icon name={isMobile ? "back" : "x"} size={20} className={isMobile ? "flip-rtl" : ""} />
         </button>
@@ -253,54 +226,7 @@ export function InfoPanel({ chat }: { chat: Chat }) {
           </>
         )}
 
-        {members && (
-          <>
-            <div className="section-label" style={{ display: "flex", alignItems: "center" }}>
-              <span style={{ flex: 1 }}>
-                {chat.type === "channel" ? t("room.subscribers") : t("room.members")} ·{" "}
-                {num(members.length, lang)}
-              </span>
-            </div>
-            <div className="card-group" style={{ padding: 4 }}>
-              {(chat.type === "group" || admin) && (
-                <button
-                  className="row"
-                  onClick={() => setAdding(true)}
-                  style={{ color: "var(--accent)" }}
-                >
-                  <span className="icon-btn filled" style={{ width: 40, height: 40 }}>
-                    <Icon name="user-plus" size={19} />
-                  </span>
-                  <span className="title">{t("room.addMember")}</span>
-                </button>
-              )}
-              {members.map((m) => (
-                <button
-                  key={m.user.id}
-                  className="row"
-                  onClick={(e) => setMemberMenu({ m, x: e.clientX, y: e.clientY })}
-                >
-                  <Avatar
-                    id={m.user.id}
-                    name={m.user.displayName}
-                    media={m.user.avatar}
-                    size={40}
-                    online={m.user.online}
-                  />
-                  <div className="grow">
-                    <div className="title">{m.user.displayName}</div>
-                    <div className="sub">{presenceText(m.user, lang)}</div>
-                  </div>
-                  {m.role !== "member" && (
-                    <span className="chip">
-                      {m.role === "owner" ? t("room.owner") : t("room.admin")}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+        <Members chat={chat} />
 
         <div className="card-group">
           {chat.type === "direct" && (
@@ -324,6 +250,112 @@ export function InfoPanel({ chat }: { chat: Chat }) {
         </div>
       </div>
 
+      {editing && <EditRoomModal chat={chat} onClose={() => setEditing(false)} />}
+      {viewer && <MediaViewer message={viewer} onClose={() => setViewer(null)} />}
+    </aside>
+  );
+}
+
+/** Members of a group (or a channel, for its admins) with role chips and the admin actions menu. */
+export function Members({ chat, bare }: { chat: Chat; bare?: boolean }) {
+  const t = useT();
+  const lang = useApp((s) => s.lang);
+  const [members, setMembers] = useState<Member[] | null>(null);
+  const [memberMenu, setMemberMenu] = useState<{ m: Member; x: number; y: number } | null>(null);
+  const [adding, setAdding] = useState(false);
+  const admin = chat.role === "owner" || chat.role === "admin";
+  const visible = chat.type === "group" || (chat.type === "channel" && admin);
+
+  const loadMembers = () => {
+    if (visible)
+      get<Member[]>(`/api/chats/${chat.id}/members`)
+        .then(setMembers)
+        .catch(() => setMembers(null));
+  };
+  useEffect(loadMembers, [chat.id, chat.memberCount, admin]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const act = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (e) {
+      useApp.getState().toast(errorText(lang, e), "error");
+    }
+  };
+
+  const memberItems = (m: Member): MenuItem[] => [
+    {
+      icon: "chat",
+      label: t("explore.message"),
+      onClick: () => useApp.getState().openDirect(m.user.id),
+    },
+    {
+      icon: "shield",
+      label: m.role === "admin" ? t("room.removeAdmin") : t("room.makeAdmin"),
+      onClick: () =>
+        act(() =>
+          patch(`/api/chats/${chat.id}/members/${m.user.id}`, {
+            role: m.role === "admin" ? "member" : "admin",
+          }).then(loadMembers),
+        ),
+      hidden: chat.role !== "owner" || m.role === "owner",
+    },
+    {
+      icon: "trash",
+      label: t("room.remove"),
+      danger: true,
+      onClick: () => act(() => del(`/api/chats/${chat.id}/members/${m.user.id}`).then(loadMembers)),
+      hidden: !admin || m.role === "owner" || (m.role === "admin" && chat.role !== "owner"),
+    },
+  ];
+
+  if (!members) return null;
+  return (
+    <>
+      {!bare && (
+        <div className="section-label" style={{ display: "flex", alignItems: "center" }}>
+          <span style={{ flex: 1 }}>
+            {chat.type === "channel" ? t("room.subscribers") : t("room.members")} ·{" "}
+            {num(members.length, lang)}
+          </span>
+        </div>
+      )}
+      <div
+        className={bare ? "member-list" : "card-group"}
+        style={bare ? undefined : { padding: 4 }}
+      >
+        {(chat.type === "group" || admin) && (
+          <button className="row add-row" onClick={() => setAdding(true)}>
+            <span className="add-ic">
+              <Icon name="user-plus" size={19} />
+            </span>
+            <span className="title">{t("room.addMember")}</span>
+          </button>
+        )}
+        {members.map((m) => (
+          <button
+            key={m.user.id}
+            className="row"
+            onClick={(e) => setMemberMenu({ m, x: e.clientX, y: e.clientY })}
+          >
+            <Avatar
+              id={m.user.id}
+              name={m.user.displayName}
+              media={m.user.avatar}
+              size={40}
+              online={m.user.online}
+            />
+            <div className="grow">
+              <div className="title">{m.user.displayName}</div>
+              <div className="sub">{presenceText(m.user, lang)}</div>
+            </div>
+            {m.role !== "member" && (
+              <span className="chip accent">
+                {m.role === "owner" ? t("room.owner") : t("room.admin")}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
       {memberMenu && (
         <Menu
           x={memberMenu.x}
@@ -333,9 +365,7 @@ export function InfoPanel({ chat }: { chat: Chat }) {
         />
       )}
       {adding && <AddMembersModal chat={chat} onClose={() => (setAdding(false), loadMembers())} />}
-      {editing && <EditRoomModal chat={chat} onClose={() => setEditing(false)} />}
-      {viewer && <MediaViewer message={viewer} onClose={() => setViewer(null)} />}
-    </aside>
+    </>
   );
 }
 

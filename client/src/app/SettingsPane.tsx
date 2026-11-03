@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { del, get, patch, post, upload } from "../api";
 import { clearAllCaches } from "../cache";
 import { Icon } from "../components/Icon";
+import { confirmAction } from "../components/sheet";
 import { Avatar, Modal, Toggle, pickFile } from "../components/ui";
 import { listStamp, num } from "../format";
 import { errorText, useT } from "../i18n";
@@ -376,7 +377,14 @@ export function SettingsPane() {
             <button
               className="item"
               style={{ color: "var(--danger)" }}
-              onClick={() => confirm(t("common.confirm")) && useApp.getState().logout()}
+              onClick={() =>
+                confirmAction({
+                  title: t("sheet.logoutTitle"),
+                  message: t("sheet.logoutBody"),
+                  label: t("settings.logout"),
+                  run: () => useApp.getState().logout(),
+                })
+              }
             >
               <Icon name="logout" size={18} />
               {t("settings.logout")}

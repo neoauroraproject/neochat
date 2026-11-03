@@ -3,6 +3,7 @@ import { get, getToken, mediaUrl, setToken, setUnauthorizedHandler } from "./api
 import { AppShell } from "./app/AppShell";
 import { useMedia } from "./app/hooks";
 import { AuthScreen, SetupScreen } from "./auth/AuthScreens";
+import { ActionSheet } from "./components/sheet";
 import { Toasts } from "./components/ui";
 import { useApp } from "./store";
 import type { PublicConfig, User } from "./types";
@@ -17,7 +18,7 @@ function useDocumentTheme() {
   const lang = useApp((s) => s.lang);
   const theme = useApp((s) => s.theme);
   const prefersLight = useMedia("(prefers-color-scheme: light)");
-  const resolved = theme === "auto" ? (prefersLight ? "light" : "dark") : theme || "dark";
+  const resolved = theme === "auto" ? (prefersLight ? "light" : "dark") : theme || "light";
   useEffect(() => {
     const root = document.documentElement;
     root.lang = lang || "fa";
@@ -27,7 +28,7 @@ function useDocumentTheme() {
     if (config?.appName) document.title = config.appName;
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", resolved === "light" ? "#efe6dc" : "#16110e");
+      ?.setAttribute("content", resolved === "light" ? "#dcdfe6" : "#0c0d10");
   }, [config, lang, resolved]);
 }
 
@@ -134,6 +135,7 @@ export default function App() {
       <Scene />
       {body}
       <Toasts />
+      <ActionSheet />
     </>
   );
 }

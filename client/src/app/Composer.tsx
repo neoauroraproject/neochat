@@ -230,7 +230,7 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
       )}
       <div className={`composer${rec ? " recording" : ""}`}>
         {rec ? (
-          <>
+          <div className="field-pill">
             <button
               className="icon-btn"
               onClick={() => stopRec(false)}
@@ -241,71 +241,65 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
             <div className="rec-indicator">
               <span className="dot" />
               <span style={{ fontVariantNumeric: "tabular-nums" }}>{duration(recTime, lang)}</span>
-              <span style={{ fontSize: 13 }}>{t("chat.recording")}</span>
+              <span>{t("chat.recording")}</span>
             </div>
-            <button
-              className="icon-btn send"
-              onClick={() => stopRec(true)}
-              aria-label={t("chat.send")}
-            >
-              <Icon name="arrow-up" size={20} stroke={2.4} />
+            <button className="send" onClick={() => stopRec(true)} aria-label={t("chat.send")}>
+              <Icon name="plane" size={19} filled />
             </button>
-          </>
+          </div>
         ) : (
-          <>
-            <button
-              className="icon-btn"
-              aria-label={t("chat.attach")}
-              disabled={!!editing}
-              onClick={(e) => {
-                const r = e.currentTarget.getBoundingClientRect();
-                setAttachMenu({ x: lang === "fa" ? r.right - 210 : r.left, y: r.top - 110 });
+          <div className="field-pill">
+            <textarea
+              ref={ta}
+              rows={1}
+              value={text}
+              placeholder={t("chat.placeholder")}
+              maxLength={config?.maxMessageLen}
+              enterKeyHint={coarse ? "enter" : "send"}
+              onChange={(e) => {
+                setText(e.target.value);
+                if (e.target.value) typing();
               }}
-            >
-              <Icon name="attach" size={22} />
-            </button>
-            <div className="field-pill">
-              <textarea
-                ref={ta}
-                rows={1}
-                value={text}
-                placeholder={t("chat.placeholder")}
-                maxLength={config?.maxMessageLen}
-                enterKeyHint={coarse ? "enter" : "send"}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  if (e.target.value) typing();
-                }}
-                onPaste={onPaste}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    send();
-                  }
-                  if (e.key === "Escape" && bar) onCancel();
-                }}
-              />
+              onPaste={onPaste}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  send();
+                }
+                if (e.key === "Escape" && bar) onCancel();
+              }}
+            />
+            <div className="tools">
               {!coarse && (
                 <button className="icon-btn" onClick={() => setEmoji(!emoji)} aria-label="emoji">
-                  <Icon name="smile" size={22} />
+                  <Icon name="smile" size={20} />
+                </button>
+              )}
+              <button
+                className="icon-btn"
+                aria-label={t("chat.attach")}
+                disabled={!!editing}
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setAttachMenu({ x: lang === "fa" ? r.left : r.right - 210, y: r.top - 110 });
+                }}
+              >
+                <Icon name="attach" size={20} />
+              </button>
+              {!text.trim() && !editing && (
+                <button className="icon-btn" onClick={startRec} aria-label={t("chat.voice")}>
+                  <Icon name="mic" size={20} />
                 </button>
               )}
             </div>
-            {text.trim() ? (
-              <button className="icon-btn send" onClick={send} aria-label={t("chat.send")}>
-                <Icon name={editing ? "check" : "arrow-up"} size={20} stroke={2.4} />
-              </button>
-            ) : (
-              <button
-                className="icon-btn"
-                onClick={startRec}
-                aria-label={t("chat.voice")}
-                disabled={!!editing}
-              >
-                <Icon name="mic" size={22} />
-              </button>
-            )}
-          </>
+            <button
+              className="send"
+              onClick={() => (text.trim() ? send() : ta.current?.focus())}
+              aria-label={t("chat.send")}
+            >
+              <Icon name={editing ? "check" : "plane"} size={19} filled={!editing} stroke={2.4} />
+            </button>
+          </div>
         )}
       </div>
       {attachMenu && (

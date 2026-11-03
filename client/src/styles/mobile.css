@@ -1,32 +1,26 @@
 /* =====================================================================
-   Phone — the same glass, full-bleed. Screens sit on a pre-blurred copy of
-   the room so only floating chrome needs a live backdrop-filter.
+   Phone — the dashboard's palette full-bleed: white list screens, the gray
+   conversation panel, a floating white tab capsule with the teal lens.
    ===================================================================== */
 .phone {
   position: fixed;
   inset: 0;
   overflow: hidden;
-}
-.phone-glass,
-.push-screen {
-  background:
-    linear-gradient(var(--window), var(--window)),
-    #1f1915 url("/scene-blur.jpg") center / cover no-repeat;
-}
-:root[data-theme="light"] .phone-glass,
-:root[data-theme="light"] .push-screen {
-  background:
-    linear-gradient(rgba(255, 250, 245, 0.72), rgba(255, 250, 245, 0.72)),
-    #efe6dc url("/scene-blur.jpg") center / cover no-repeat;
+  background: var(--surface);
 }
 .phone-glass {
   position: absolute;
   inset: 0;
+  background: var(--surface);
+}
+.push-screen {
+  background: var(--panel);
 }
 .tab-screen {
   position: absolute;
   inset: 0;
-  padding: calc(6px + env(safe-area-inset-top, 0px)) 14px 0;
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 16px 0;
+  background: var(--surface);
   transition: transform 440ms var(--ease-drawer);
 }
 .tab-screen > * {
@@ -36,30 +30,41 @@
   padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
-/* top bar: floating glass circles around a centered title */
+/* top bar: round buttons around a centered title */
 .m-top {
   display: grid;
-  grid-template-columns: 44px 1fr 44px;
+  grid-template-columns: 42px 1fr 42px;
   align-items: center;
   gap: 8px;
-  padding: 2px 0 12px;
+  padding: 4px 0 14px;
   flex-shrink: 0;
 }
 .m-title {
   text-align: center;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+.phone .search input {
+  height: 44px;
+  border-radius: 12px;
+  font-size: 15px;
 }
 .phone .navbar {
   padding: 2px 0 6px;
 }
 .phone .large-title {
-  font-size: 32px;
+  font-size: 28px;
+  font-weight: 600;
   padding: 0 4px 12px;
 }
-.phone .stories .story .name {
-  font-size: 12px;
+.phone .chat-cell {
+  min-height: 72px;
+  padding-inline: 12px 10px;
+  gap: 13px;
+}
+.phone .cells {
+  gap: 2px;
 }
 
 /* stacked navigation */
@@ -67,11 +72,12 @@
   position: absolute;
   inset: 0;
   z-index: 10;
-  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.3);
+  box-shadow: -12px 0 40px rgba(23, 32, 64, 0.12);
   animation: push-in 460ms var(--ease-drawer);
 }
 .push-screen.top {
   z-index: 12;
+  background: var(--surface);
 }
 .push-screen.leaving {
   animation: push-out 320ms var(--ease-drawer) forwards;
@@ -95,7 +101,7 @@
 }
 [dir="rtl"] .push-screen {
   animation-name: push-in-rtl;
-  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.3);
+  box-shadow: 12px 0 40px rgba(23, 32, 64, 0.12);
 }
 [dir="rtl"] .push-screen.leaving {
   animation-name: push-out-rtl;
@@ -114,7 +120,7 @@
   }
 }
 
-/* ---------- Telegram-style capsule: icons only ---------- */
+/* ---------- Tab capsule: icons only ---------- */
 .capsule {
   position: absolute;
   z-index: 8;
@@ -124,15 +130,14 @@
   gap: 2px;
   height: 64px;
   padding: 6px;
-  border-radius: 999px;
+  border-radius: 20px;
   transform: translateX(-50%);
   background: var(--bar);
   backdrop-filter: var(--material);
   -webkit-backdrop-filter: var(--material);
-  border: 1px solid var(--window-edge);
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 var(--window-highlight);
+    0 14px 36px rgba(23, 32, 64, 0.14),
+    0 0 0 1px color-mix(in srgb, var(--label) 5%, transparent);
   transition:
     transform 420ms var(--ease-drawer),
     opacity 300ms var(--ease-out);
@@ -145,18 +150,18 @@
 .capsule button {
   position: relative;
   z-index: 1;
-  width: 64px;
+  width: 62px;
   height: 52px;
-  border-radius: 999px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
-  color: var(--label-2);
+  color: var(--icon);
   transition:
     color 200ms ease,
     transform 140ms var(--ease-out);
 }
 .capsule button[aria-current="true"] {
-  color: var(--label);
+  color: var(--accent);
 }
 .capsule button:active {
   transform: scale(0.9);
@@ -166,65 +171,100 @@
   top: 6px;
   left: 0;
   height: 52px;
-  border-radius: 999px;
-  background: var(--lens);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: var(--accent-soft);
   transition:
     transform 440ms var(--spring),
     width 440ms var(--spring);
 }
 .capsule .badge {
   position: absolute;
-  top: 5px;
+  top: 6px;
   inset-inline-start: calc(50% + 4px);
   min-width: 18px;
   height: 18px;
   font-size: 11px;
   padding: 0 5px;
-  background: #ff3b30;
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
-/* ---------- Conversation on the phone: floating chrome ---------- */
+/* ---------- Conversation on the phone ---------- */
 .phone .conv-head {
-  padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 10px;
   gap: 8px;
-}
-.phone .conv-head::after {
-  display: none;
+  background: var(--panel-head);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--label) 6%, transparent);
 }
 .phone .conv-head .who {
-  height: 48px;
-  padding: 0 14px 0 4px;
-  border-radius: 999px;
-  background: var(--bar);
-  backdrop-filter: var(--material-thin);
-  -webkit-backdrop-filter: var(--material-thin);
-  border: 1px solid var(--card-edge);
+  padding: 2px;
 }
-[dir="rtl"] .phone .conv-head .who {
-  padding: 0 4px 0 14px;
+.phone .conv-head .who .title {
+  font-size: 16px;
+}
+.phone .conv-head .glass-circle {
+  background: var(--surface);
 }
 .phone .conv-head > .icon-btn {
-  width: 44px;
-  height: 44px;
-  background: var(--bar);
-  border: 1px solid var(--card-edge);
+  color: var(--label-2);
 }
 .phone .messages {
-  padding-inline: 10px;
+  padding-inline: 12px;
 }
 .phone .msg {
-  max-width: 84%;
+  max-width: 86%;
+  gap: 8px;
+}
+.phone .msg.first {
+  margin-top: 12px;
+}
+.phone .msg + .msg:not(.first) {
+  margin-top: 4px;
+}
+.phone .bubble {
+  padding: 9px 13px;
+  border-radius: 16px;
+}
+.phone .bubble .text {
+  font-size: 15px;
+  font-weight: 450;
+  line-height: 1.4;
 }
 .phone .composer-wrap {
   padding: 6px 10px calc(10px + env(safe-area-inset-bottom, 0px));
 }
+.phone .field-pill {
+  min-height: 54px;
+  padding: 6px;
+  border-radius: 14px;
+}
+.phone .field-pill textarea {
+  min-height: 42px;
+  padding-block: 10px;
+  font-size: 16px;
+}
+.phone .field-pill .tools {
+  height: 42px;
+}
+.phone .field-pill .send {
+  width: 44px;
+  height: 42px;
+}
+.phone .typing-row {
+  padding: 0 12px 8px;
+}
+.phone .scroll-down {
+  bottom: 84px;
+  inset-inline-end: 14px;
+}
 .phone .chat-top-ad {
-  margin: 0 14px 6px;
+  margin: 8px 12px 0;
 }
 .phone .info-pane,
 .phone .settings-pane {
-  padding: calc(6px + env(safe-area-inset-top, 0px)) 14px env(safe-area-inset-bottom, 0px);
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 16px env(safe-area-inset-bottom, 0px);
+  background: var(--surface);
 }
 .phone .tab-screen .settings-pane {
   padding: 0;

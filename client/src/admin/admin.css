@@ -49,8 +49,8 @@
   border-radius: 9px;
   display: grid;
   place-items: center;
-  background: var(--accent);
-  color: #fff;
+  background: var(--fill);
+  color: var(--label);
   flex-shrink: 0;
 }
 .side-item .ic svg {
@@ -423,17 +423,4 @@ table.tbl {
 .ad-card.admin-ad .btn {
   margin-top: 10px;
 }
-
-/* System Settings–style colored icons per section */
-.admin-nav .side-item:nth-of-type(1) .ic { background: #007aff; }
-.admin-nav .side-item:nth-of-type(2) .ic { background: #34c759; }
-.admin-nav .side-item:nth-of-type(3) .ic { background: #5856d6; }
-.admin-nav .side-item:nth-of-type(4) .ic { background: #ff9500; }
-.admin-nav .side-item:nth-of-type(5) .ic { background: #ff2d55; }
-.admin-nav .side-item:nth-of-type(6) .ic { background: #af52de; }
-.admin-nav .side-item:nth-of-type(7) .ic { background: #8e8e93; }
-.admin-nav .side-item:nth-of-type(8) .ic { background: #30b0c7; }
-.admin-nav .side-item:nth-of-type(9) .ic { background: #34c759; }
-.admin-nav .side-item:nth-of-type(10) .ic { background: #ff3b30; }
-.admin-nav .side-item:nth-of-type(11) .ic { background: #636366; }
 

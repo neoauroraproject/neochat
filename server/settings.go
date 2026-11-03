@@ -59,9 +59,9 @@ func defaultSettings() Settings {
 	return Settings{
 		AppName:              "NeoChat",
 		Tagline:              "پیام‌رسان امن و خصوصی",
-		AccentColor:          "#0a84ff",
+		AccentColor:          "#00a388",
 		DefaultLang:          "fa",
-		DefaultTheme:         "dark",
+		DefaultTheme:         "light",
 		WelcomeText:          "به پیام‌رسان خصوصی خوش آمدید. بدون شماره تلفن، فقط با نام کاربری.",
 		Registration:         "open",
 		MinPasswordLen:       8,
@@ -98,7 +98,8 @@ func (st *Settings) normalize() {
 	}
 	st.Tagline = trimLen(st.Tagline, 120)
 	st.WelcomeText = trimLen(st.WelcomeText, 500)
-	if !hexColorRe.MatchString(st.AccentColor) {
+	// Earlier default accents move to the current teal; a color the admin picked stays.
+	if !hexColorRe.MatchString(st.AccentColor) || st.AccentColor == "#0a84ff" || st.AccentColor == "#7a5af8" {
 		st.AccentColor = d.AccentColor
 	}
 	if st.DefaultLang != "fa" && st.DefaultLang != "en" {

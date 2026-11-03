@@ -10,13 +10,24 @@ import { useApp } from "../store";
 import type { Ad, Chat, Message } from "../types";
 import { Composer } from "./Composer";
 import { useMobile, useTick } from "./hooks";
+import { askDeleteMessage } from "./chatActions";
+import { goBack } from "./nav";
 import { MediaViewer } from "./MediaViewer";
+import { Members } from "./InfoPanel";
 import { MessageItem } from "./MessageItem";
 
 const EMPTY: Message[] = [];
 const GROUP_GAP = 5 * 60_000;
 
-export function Conversation({ chat }: { chat: Chat }) {
+export function Conversation({
+  chat,
+  filesHidden,
+  onShowFiles,
+}: {
+  chat: Chat;
+  filesHidden?: boolean;
+  onShowFiles?: () => void;
+}) {
   const t = useT();
   const lang = useApp((s) => s.lang);
   const me = useApp((s) => s.me)!;
@@ -30,6 +41,7 @@ export function Conversation({ chat }: { chat: Chat }) {
   const atBottom = useRef(true);
   const loadingOlder = useRef(false);
   const prevHeight = useRef(0);
+  const prevLen = useRef(0);
   const [showDown, setShowDown] = useState(false);
   const [menu, setMenu] = useState<{ m: Message; x: number; y: number } | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -37,6 +49,7 @@ export function Conversation({ chat }: { chat: Chat }) {
   const [viewer, setViewer] = useState<Message | null>(null);
   const [dragging, setDragging] = useState(false);
   const [unreadAnchor, setUnreadAnchor] = useState(0);
+  const [view, setView] = useState<"messages" | "members">("messages");
   // Messages newer than the moment the chat opened get a pop-in animation; history renders still.
   const openedAt = useMemo(() => Date.now(), [chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useTick(30_000);
@@ -49,6 +62,7 @@ export function Conversation({ chat }: { chat: Chat }) {
     setUnreadAnchor(chat.unread > 0 ? chat.lastReadId : 0);
     setReplyTo(null);
     setEditing(null);
+    setView("messages");
     atBottom.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.id]);
@@ -62,8 +76,13 @@ export function Conversation({ chat }: { chat: Chat }) {
       loadingOlder.current = false;
       prevHeight.current = 0;
     } else if (atBottom.current) {
-      el.scrollTop = el.scrollHeight;
+      const grew = messages.length - prevLen.current;
+      // one to three new messages slide into view like Telegram; first load and big jumps land instantly
+      if (prevLen.current > 0 && grew > 0 && grew <= 3)
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      else el.scrollTop = el.scrollHeight;
     }
+    prevLen.current = messages.length;
   }, [messages]);
 
   useLayoutEffect(() => {
@@ -156,11 +175,7 @@ export function Conversation({ chat }: { chat: Chat }) {
         icon: "trash",
         label: t("common.delete"),
         danger: true,
-        onClick: () =>
-          useApp
-            .getState()
-            .deleteMessage(m.id)
-            .catch(() => useApp.getState().toast(t("err.generic"), "error")),
+        onClick: () => askDeleteMessage(m.id),
         hidden: !(mine || admin),
       },
     ];
@@ -205,17 +220,31 @@ export function Conversation({ chat }: { chat: Chat }) {
         next.senderId !== m.senderId ||
         next.kind === "system" ||
         next.createdAt - m.createdAt > GROUP_GAP;
+      let tail: Message | undefined;
+      if (groupStart) {
+        let j = i;
+        while (
+          j + 1 < messages.length &&
+          messages[j + 1].senderId === m.senderId &&
+          messages[j + 1].kind !== "system" &&
+          messages[j + 1].createdAt - messages[j].createdAt <= GROUP_GAP
+        )
+          j++;
+        tail = messages[j];
+      }
       out.push(
         <MessageItem
           key={m.clientId || m.id}
           m={m}
           chat={chat}
+          tail={tail}
           first={groupStart}
           last={groupEnd}
           fresh={m.createdAt >= openedAt}
           onMenu={onMenu}
           onOpenMedia={setViewer}
           onJumpTo={jumpTo}
+          onReply={canPost ? setReplyTo : undefined}
         />,
       );
       prev = m;
@@ -237,6 +266,7 @@ export function Conversation({ chat }: { chat: Chat }) {
     me.id,
     onMenu,
     jumpTo,
+    canPost,
     channelAds,
     config?.adsChannelEvery,
     t,
@@ -266,6 +296,15 @@ export function Conversation({ chat }: { chat: Chat }) {
 
   const call = (video: boolean) => chat.peer && useCall.getState().start(chat.peer, video);
   const openInfo = () => useApp.setState((s) => ({ infoOpen: !s.infoOpen }));
+  const admin = chat.role === "owner" || chat.role === "admin";
+  const hasMembers = chat.type === "group" || (chat.type === "channel" && admin);
+  const typerNames = typers.map(([uid]) => {
+    const id = Number(uid);
+    if (chat.peer?.id === id) return chat.peer.displayName;
+    for (let k = messages.length - 1; k >= 0; k--)
+      if (messages[k].senderId === id) return messages[k].sender.displayName;
+    return "";
+  });
 
   return (
     <section
@@ -284,47 +323,107 @@ export function Conversation({ chat }: { chat: Chat }) {
         for (const f of Array.from(e.dataTransfer.files)) useApp.getState().sendFile(chat.id, f);
       }}
     >
-      <header className="conv-head">
-        <button
-          className={isMobile ? "glass-circle" : "icon-btn"}
-          onClick={() => useApp.getState().openChat(null)}
-          aria-label={t("common.back")}
-        >
-          <Icon name="back" size={22} className="flip-rtl" />
-        </button>
-        <button className="who" onClick={openInfo}>
-          <Avatar
-            id={chat.saved ? -1 : (chat.peer?.id ?? chat.id)}
-            name={title}
-            media={chat.saved ? undefined : (chat.peer?.avatar ?? chat.avatar)}
-            size={42}
-            online={chat.type === "direct" && !chat.saved && chat.peer?.online}
-            icon={chat.saved ? "bookmark" : undefined}
-          />
-          <div style={{ minWidth: 0 }}>
-            <div className="title">{title}</div>
-            {status && <div className={`status${statusOn ? " on" : ""}`}>{status}</div>}
-          </div>
-        </button>
-        {chat.type === "direct" && !chat.saved && config?.callsEnabled && (
-          <>
-            {config.videoCallsEnabled && (
-              <button className="icon-btn" onClick={() => call(true)} aria-label={t("call.video")}>
-                <Icon name="video" size={22} />
+      {isMobile ? (
+        <header className="conv-head">
+          <button className="glass-circle" onClick={goBack} aria-label={t("common.back")}>
+            <Icon name="back" size={22} className="flip-rtl" />
+          </button>
+          <button className="who" onClick={openInfo}>
+            <Avatar
+              id={chat.saved ? -1 : (chat.peer?.id ?? chat.id)}
+              name={title}
+              media={chat.saved ? undefined : (chat.peer?.avatar ?? chat.avatar)}
+              size={42}
+              online={chat.type === "direct" && !chat.saved && chat.peer?.online}
+              icon={chat.saved ? "bookmark" : undefined}
+            />
+            <div style={{ minWidth: 0 }}>
+              <div className="title">{title}</div>
+              {status && <div className={`status${statusOn ? " on" : ""}`}>{status}</div>}
+            </div>
+          </button>
+          {chat.type === "direct" && !chat.saved && config?.callsEnabled && (
+            <>
+              {config.videoCallsEnabled && (
+                <button
+                  className="icon-btn hdr-call"
+                  onClick={() => call(true)}
+                  aria-label={t("call.video")}
+                >
+                  <Icon name="video" size={22} />
+                </button>
+              )}
+              <button
+                className="icon-btn hdr-call"
+                onClick={() => call(false)}
+                aria-label={t("call.voice")}
+              >
+                <Icon name="phone" size={21} />
               </button>
+            </>
+          )}
+          <button className="icon-btn" onClick={openInfo} aria-label={t("chat.info")}>
+            <Icon name="more-v" size={22} />
+          </button>
+        </header>
+      ) : (
+        <header className="conv-head">
+          <button className="who" onClick={openInfo}>
+            <span className="title">{title}</span>
+            {chat.type === "direct" && status && (
+              <span className={`status${statusOn ? " on" : ""}`}>{status}</span>
             )}
-            <button className="icon-btn" onClick={() => call(false)} aria-label={t("call.voice")}>
-              <Icon name="phone" size={21} />
+          </button>
+          {hasMembers && (
+            <div className="tabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={view === "messages"}
+                onClick={() => setView("messages")}
+              >
+                {t("conv.messages")}
+              </button>
+              <button
+                role="tab"
+                aria-selected={view === "members"}
+                onClick={() => setView("members")}
+              >
+                {chat.type === "channel" ? t("room.subscribers") : t("conv.participants")}
+              </button>
+            </div>
+          )}
+          {chat.type === "direct" && !chat.saved && config?.callsEnabled && (
+            <div className="head-actions">
+              {config.videoCallsEnabled && (
+                <button className="sq-btn" onClick={() => call(true)} aria-label={t("call.video")}>
+                  <Icon name="video" size={18} />
+                </button>
+              )}
+              <button className="sq-btn" onClick={() => call(false)} aria-label={t("call.voice")}>
+                <Icon name="phone" size={17} />
+              </button>
+            </div>
+          )}
+          {filesHidden && onShowFiles && (
+            <button className="sq-btn" onClick={onShowFiles} aria-label={t("conv.showFiles")}>
+              <Icon name="folder" size={18} />
             </button>
-          </>
-        )}
-        <button className="icon-btn" onClick={openInfo} aria-label={t("chat.info")}>
-          <Icon name="more-v" size={22} />
-        </button>
-      </header>
+          )}
+        </header>
+      )}
       <ChatTopAd chatId={chat.id} />
 
-      <div className="messages" ref={scroller} onScroll={onScroll}>
+      {view === "members" && !isMobile && (
+        <div className="members-view">
+          <Members chat={chat} bare />
+        </div>
+      )}
+      <div
+        className="messages"
+        ref={scroller}
+        onScroll={onScroll}
+        hidden={view === "members" && !isMobile}
+      >
         <div className="spacer" />
         {hasMore && messages.length > 0 && (
           <div className="sys-msg" style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -355,7 +454,20 @@ export function Conversation({ chat }: { chat: Chat }) {
         </button>
       )}
 
-      {canPost ? (
+      {typers.length > 0 && view === "messages" && (
+        <div className="typing-row" aria-live="polite">
+          <span className="typing-dots">
+            <i />
+            <i />
+            <i />
+          </span>
+          <span>
+            {typerNames[0] ? t("conv.isTyping", { name: typerNames[0].split(" ")[0] }) : status}
+          </span>
+        </div>
+      )}
+
+      {view === "members" && !isMobile ? null : canPost ? (
         <Composer
           chat={chat}
           replyTo={replyTo}
