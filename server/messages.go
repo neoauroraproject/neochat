@@ -161,6 +161,7 @@ func (s *Server) insertMessage(chatID, senderID int64, kind, text, mediaID strin
 	m.ClientID = clientID
 	ids, _ := s.memberIDs(chatID)
 	s.hub.sendToMany(ids, "message", m)
+	go s.pushMessage(m)
 	return m, nil
 }
 

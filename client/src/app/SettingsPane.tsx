@@ -6,7 +6,8 @@ import { confirmAction } from "../components/sheet";
 import { Avatar, Modal, Toggle, pickFile } from "../components/ui";
 import { listStamp, num } from "../format";
 import { errorText, useT } from "../i18n";
-import { getPref, setPref } from "../notify";
+import { disablePush, enablePush, getPref, setPref } from "../notify";
+import { isStandalone, usePwa } from "../pwa";
 import { useApp } from "../store";
 import type { User } from "../types";
 import { LargeTitleScreen } from "./Panes";
@@ -19,12 +20,6 @@ interface Session {
   lastUsed: number;
   current: boolean;
 }
-
-let installPrompt: (Event & { prompt(): void }) | null = null;
-window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault();
-  installPrompt = e as Event & { prompt(): void };
-});
 
 const deviceName = (ua: string) => {
   const os = /Android/.test(ua)
@@ -56,6 +51,7 @@ export function SettingsPane() {
   const theme = useApp((s) => s.theme);
   const me = useApp((s) => s.me)!;
   const config = useApp((s) => s.config);
+  const pwa = usePwa();
   const [profile, setProfile] = useState({
     displayName: me.displayName,
     username: me.username,
@@ -110,6 +106,8 @@ export function SettingsPane() {
     }
     setPref("notify", v);
     setNotify(v);
+    if (v) enablePush();
+    else disablePush();
   };
 
   const dirty =
@@ -353,8 +351,11 @@ export function SettingsPane() {
               <Icon name="trash" size={18} />
               {t("settings.clearCache")}
             </button>
-            {installPrompt && (
-              <button className="item" onClick={() => installPrompt?.prompt()}>
+            {!isStandalone() && (
+              <button
+                className="item"
+                onClick={() => (pwa.deferred ? pwa.install() : pwa.openGuide())}
+              >
                 <Icon name="download" size={18} />
                 <div className="grow">
                   <div>{t("settings.install")}</div>

@@ -75,3 +75,47 @@ self.addEventListener("fetch", (e) => {
   }
   e.respondWith(fetch(req).catch(() => caches.match(req)));
 });
+
+// Web Push: the server sends {title, body, chatId, tag}, encrypted for this device.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try {
+    d = e.data ? e.data.json() : {};
+  } catch {
+    d = { body: e.data ? e.data.text() : "" };
+  }
+  e.waitUntil(
+    (async () => {
+      const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // Chrome and Firefox let us skip the banner while the app is on screen. Safari drops
+      // subscriptions whose pushes show nothing, so there it always appears.
+      const ua = navigator.userAgent;
+      const safari = /Safari/.test(ua) && !/Chrome|Chromium|Android/.test(ua);
+      if (!safari && wins.some((w) => w.focused && w.visibilityState === "visible")) return;
+      await self.registration.showNotification(d.title || "NeoChat", {
+        body: d.body || "",
+        tag: d.tag,
+        renotify: !!d.tag,
+        icon: "/icon.svg",
+        data: { chatId: d.chatId },
+      });
+    })(),
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const chatId = e.notification.data && e.notification.data.chatId;
+  e.waitUntil(
+    (async () => {
+      const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      if (wins.length) {
+        const win = wins.find((w) => w.focused) || wins[0];
+        await win.focus();
+        win.postMessage({ type: "open-chat", chatId });
+        return;
+      }
+      await self.clients.openWindow(chatId ? `/?chat=${chatId}` : "/");
+    })(),
+  );
+});

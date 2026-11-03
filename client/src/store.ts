@@ -132,10 +132,17 @@ export const useApp = create<AppState>((set, getState) => {
     cacheChats();
   };
 
+  // Files upload side by side, but each one is posted only after the files sent before it in the
+  // same chat, so a small photo never overtakes a big one and the caption stays under the last.
+  const fileQueue = new Map<number, Promise<void>>();
+
   const doSend = async (chatId: number, pending: Message) => {
+    const f = pending.clientId ? files.get(pending.clientId) : undefined;
+    let release = () => {};
+    const before = f ? fileQueue.get(chatId) : undefined;
+    if (f) fileQueue.set(chatId, new Promise<void>((r) => (release = r)));
     try {
       let mediaId = "";
-      const f = pending.clientId ? files.get(pending.clientId) : undefined;
       if (f) {
         const media = await upload(f.file, {
           name: f.name,
@@ -146,6 +153,7 @@ export const useApp = create<AppState>((set, getState) => {
             ),
         });
         mediaId = media.id;
+        await before;
       }
       const m = await post<Message>(`/api/chats/${chatId}/messages`, {
         text: pending.text,
@@ -164,6 +172,8 @@ export const useApp = create<AppState>((set, getState) => {
       );
       const err = e as ApiError;
       if (err.code && err.code !== "network") getState().toast(err.message, "error");
+    } finally {
+      release();
     }
   };
 

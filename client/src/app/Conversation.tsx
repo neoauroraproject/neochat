@@ -12,6 +12,7 @@ import { Composer } from "./Composer";
 import { useMobile, useTick } from "./hooks";
 import { askDeleteMessage } from "./chatActions";
 import { goBack } from "./nav";
+import { useStaged } from "./MediaPreview";
 import { MediaViewer } from "./MediaViewer";
 import { Members } from "./InfoPanel";
 import { MessageItem } from "./MessageItem";
@@ -320,7 +321,7 @@ export function Conversation({
         e.preventDefault();
         setDragging(false);
         if (!canPost) return;
-        for (const f of Array.from(e.dataTransfer.files)) useApp.getState().sendFile(chat.id, f);
+        if (e.dataTransfer.files.length) useStaged.getState().add(chat.id, e.dataTransfer.files);
       }}
     >
       {isMobile ? (

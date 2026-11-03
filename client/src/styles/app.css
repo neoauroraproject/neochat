@@ -2494,3 +2494,310 @@ button.tile:active {
   background: var(--accent-soft) !important;
   color: var(--accent) !important;
 }
+
+/* ---------- install guide (first sign-in) ---------- */
+.install-guide {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  text-align: center;
+}
+.install-icon img {
+  display: block;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(23, 32, 64, 0.12);
+}
+.install-text {
+  margin: 0;
+  color: var(--label-2);
+  line-height: 1.6;
+}
+.install-steps {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: start;
+}
+.install-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--field);
+  line-height: 1.5;
+}
+.install-num {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.install-inline {
+  vertical-align: -4px;
+  color: var(--accent);
+}
+.install-note,
+.install-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: start;
+}
+.install-note svg,
+.install-warn svg {
+  flex: none;
+  margin-top: 2px;
+}
+.install-warn {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--label);
+}
+.install-warn svg {
+  color: var(--warning);
+}
+.install-bell {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- send preview (pick, paste or drop files) ---------- */
+.mp-single {
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #000;
+  overflow: hidden;
+}
+.mp-single img,
+.mp-single video {
+  display: block;
+  max-width: 100%;
+  max-height: min(56vh, 520px);
+  object-fit: contain;
+}
+.mp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.mp-tile {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--field);
+}
+.mp-tile-body {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.mp-tile img,
+.mp-tile video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition:
+    transform 200ms var(--ease-out),
+    opacity 200ms var(--ease-out);
+}
+.mp-tile.off img,
+.mp-tile.off video {
+  opacity: 0.45;
+  transform: scale(0.92);
+}
+.mp-play {
+  position: absolute;
+  inset-inline-start: 6px;
+  bottom: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  pointer-events: none;
+}
+.mp-check {
+  position: absolute;
+  top: 6px;
+  inset-inline-start: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+.off > .mp-check {
+  background: rgba(0, 0, 0, 0.25);
+}
+.mp-remove {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  cursor: pointer;
+}
+.mp-add {
+  display: grid;
+  place-items: center;
+  border: 1.5px dashed var(--fill-2);
+  color: var(--label-2);
+  cursor: pointer;
+}
+.mp-list {
+  display: grid;
+  gap: 6px;
+}
+.mp-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--field);
+  transition: opacity 200ms var(--ease-out);
+}
+.mp-file.off {
+  opacity: 0.5;
+}
+.mp-file .mp-check {
+  position: static;
+  flex: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.mp-file-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--ft-doc-bg);
+  color: var(--ft-doc);
+}
+.mp-name {
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.modal-foot:has(.mp-foot) {
+  padding-top: 6px;
+}
+.mp-foot {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px;
+  border-radius: 15px;
+  background: var(--field);
+}
+.mp-foot .icon-btn {
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+.mp-caption {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  max-height: 120px;
+  padding: 10px 6px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  font-size: 15px;
+}
+.mp-send {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+.mp-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+[dir="rtl"] .mp-send svg {
+  transform: scaleX(-1);
+}
+.mp-count {
+  position: absolute;
+  top: -6px;
+  inset-inline-end: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 2px solid var(--surface);
+  border-radius: 10px;
+  background: var(--label);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+}
+.mp-file-icon {
+  overflow: hidden;
+}
+.mp-file-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

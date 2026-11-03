@@ -24,7 +24,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var version = "1.4.0"
+var version = "1.5.0"
 
 // defaultAdFeed is the NeoAurora license worker that serves network ads (override with -ad-feed).
 var defaultAdFeed = "https://license.hossein-m466.workers.dev"
@@ -309,6 +309,10 @@ func (s *Server) routes() http.Handler {
 	h("POST /api/media", s.authed(s.handleUpload))
 	mux.HandleFunc("GET /media/{id}", s.handleServeMedia)
 	mux.HandleFunc("GET /media/{id}/{variant}", s.handleServeMedia)
+
+	h("GET /api/push/key", s.authed(s.handlePushKey))
+	h("POST /api/push/subscribe", s.authed(s.handlePushSubscribe))
+	h("POST /api/push/unsubscribe", s.authed(s.handlePushUnsubscribe))
 
 	h("GET /api/calls", s.authed(s.handleCallHistory))
 	h("GET /api/calls/ice", s.authed(s.handleICE))

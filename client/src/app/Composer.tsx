@@ -7,6 +7,7 @@ import { useApp } from "../store";
 import type { Chat, Message } from "../types";
 import { wsSend } from "../ws";
 import { useMedia } from "./hooks";
+import { MediaPreview, useStaged } from "./MediaPreview";
 
 const EMOJI =
   "😀 😂 🥲 😍 😘 😎 🤔 😴 😭 😡 👍 👎 👏 🙏 💪 🔥 ❤️ 💔 🎉 ✨ ✅ ❌ ⭐ 🌹 ☕ 🍰 ⚽ 🎵 📷 📌 🙂 😉 😅 🤝 👋 🤗 😢 😱 💯 🌙".split(
@@ -28,6 +29,7 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
   const draft = useApp((s) => s.drafts[chat.id] || "");
   const [text, setText] = useState(draft);
   const [attachMenu, setAttachMenu] = useState<{ x: number; y: number } | null>(null);
+  const stagedFor = useStaged((s) => (s.items.length ? s.chatId : null));
   const [emoji, setEmoji] = useState(false);
   const [rec, setRec] = useState<{ start: number; recorder: MediaRecorder; chunks: Blob[] } | null>(
     null,
@@ -97,25 +99,21 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
     onSent();
   };
 
-  const sendFiles = (files: FileList | File[]) => {
-    for (const f of Array.from(files)) {
-      const kind = f.type.startsWith("image/")
-        ? "image"
-        : f.type.startsWith("video/")
-          ? "video"
-          : "file";
-      const limit =
-        kind === "image"
-          ? config!.maxImageMB
-          : kind === "video"
-            ? config!.maxVideoMB
-            : config!.maxFileMB;
-      if (f.size > limit * 1024 * 1024) {
-        useApp.getState().toast(t("chat.tooLarge", { n: limit }), "error");
-        continue;
-      }
-      typing("uploading");
-      useApp.getState().sendFile(chat.id, f, { replyTo });
+  // Picked, pasted and dropped files open the send preview first.
+  const sendFiles = (files: FileList | File[]) => useStaged.getState().add(chat.id, files);
+
+  // Like Telegram: the reply goes on the first file, the caption under the last one.
+  const sendStaged = (list: File[], caption: string) => {
+    typing("uploading");
+    list.forEach((f, i) =>
+      useApp.getState().sendFile(chat.id, f, {
+        replyTo: i === 0 ? replyTo : null,
+        caption: i === list.length - 1 ? caption : undefined,
+      }),
+    );
+    if (caption && caption === text.trim()) {
+      setText("");
+      useApp.getState().setDraft(chat.id, "");
     }
     onCancel();
     onSent();
@@ -302,6 +300,9 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
           </div>
         )}
       </div>
+      {stagedFor === chat.id && (
+        <MediaPreview chatId={chat.id} initialCaption={text.trim()} onSend={sendStaged} />
+      )}
       {attachMenu && (
         <Menu
           x={attachMenu.x}

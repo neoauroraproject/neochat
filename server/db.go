@@ -141,6 +141,20 @@ CREATE TABLE invites (
 	created_at INTEGER NOT NULL
 );
 `,
+	`
+CREATE TABLE push_subscriptions (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+	endpoint   TEXT NOT NULL UNIQUE,
+	p256dh     TEXT NOT NULL,
+	auth       TEXT NOT NULL,
+	lang       TEXT NOT NULL DEFAULT 'en',
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_push_user ON push_subscriptions(user_id);
+CREATE INDEX idx_push_session ON push_subscriptions(session_id);
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {

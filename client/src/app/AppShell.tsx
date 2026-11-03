@@ -5,6 +5,7 @@ import { Icon } from "../components/Icon";
 import { Avatar, BrandLogo } from "../components/ui";
 import { num } from "../format";
 import { useT } from "../i18n";
+import { syncPush } from "../notify";
 import { useApp, type Section } from "../store";
 import type { Chat, RoomPreview } from "../types";
 import { CallView } from "./CallView";
@@ -12,6 +13,7 @@ import { ChatList } from "./ChatList";
 import { Conversation } from "./Conversation";
 import { useMedia, useMobile } from "./hooks";
 import { InfoPanel } from "./InfoPanel";
+import { InstallGuide } from "./InstallGuide";
 import { goBack } from "./nav";
 import { CallsPane, ExplorePane } from "./Panes";
 import { RoomPreviewModal } from "./RoomPreviewModal";
@@ -198,7 +200,27 @@ function DeepLinks() {
         else if (u) useApp.getState().openDirect(u.id);
       });
     }
-    if (join || handle) history.replaceState(null, "", "/");
+    // Opened from a notification while the app was closed: /?chat=<id>.
+    const fromPush = Number(new URLSearchParams(location.search).get("chat"));
+    if (fromPush) {
+      useApp
+        .getState()
+        .refreshChat(fromPush)
+        .then((c) => c && useApp.getState().openChat(c.id));
+    }
+    if (join || handle || fromPush) history.replaceState(null, "", "/");
+  }, []);
+
+  // Tapping a notification while the app is open in the background.
+  useEffect(() => {
+    syncPush();
+    const sw = navigator.serviceWorker;
+    if (!sw) return;
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === "open-chat" && e.data.chatId) useApp.getState().openChat(e.data.chatId);
+    };
+    sw.addEventListener("message", onMsg);
+    return () => sw.removeEventListener("message", onMsg);
   }, []);
   return room ? (
     <RoomPreviewModal room={room.room} invite={room.invite} onClose={() => setRoom(null)} />
@@ -442,6 +464,7 @@ export function AppShell() {
         <TabCapsule hidden={!!chat} />
         <OfflineBanner />
         <DeepLinks />
+        <InstallGuide />
         {callPhase !== "idle" && <CallView />}
       </div>
     );
@@ -493,6 +516,7 @@ export function AppShell() {
       {callPhase !== "idle" && callMin && <CallView />}
       <OfflineBanner />
       <DeepLinks />
+      <InstallGuide />
     </div>
   );
 }

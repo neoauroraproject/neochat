@@ -247,7 +247,7 @@ const en = {
   "settings.themeLight": "Light",
   "settings.themeAuto": "System",
   "settings.notifications": "Notifications",
-  "settings.enableNotifications": "Show desktop notifications",
+  "settings.enableNotifications": "Notifications for new messages",
   "settings.sound": "Sound for new messages",
   "settings.password": "Change password",
   "settings.currentPassword": "Current password",
@@ -268,6 +268,32 @@ const en = {
   "settings.changePhoto": "Change photo",
   "settings.install": "Install app",
   "settings.installHint": "Add this messenger to your home screen to use it like a native app.",
+
+  // install guide (first sign-in)
+  "install.title": "Install {app}",
+  "install.intro":
+    "Install {app} as an app: it opens full screen from your home screen, starts faster and can show notifications.",
+  "install.iosShare": "In Safari, tap the Share button",
+  "install.iosAdd": "Choose “Add to Home Screen”",
+  "install.iosOpen": "Open {app} from your home screen and allow notifications",
+  "install.iosNotify":
+    "On iPhone and iPad, notifications only work when the app is added to the home screen from Safari.",
+  "install.iosNotSafari":
+    "To get notifications, open this page in Safari and add {app} to your home screen from there. Copy the link and paste it into Safari.",
+  "install.copyLink": "Copy link",
+  "install.later": "Not now",
+  "install.menu": "Open your browser menu and choose “Install app” or “Add to Home screen”.",
+  "notify.title": "Turn on notifications",
+  "notify.body":
+    "Get a notification for every new message, even when the app is closed. You can change this later in Settings.",
+  "notify.enable": "Turn on",
+
+  // send preview
+  "media.sendMedia": "Send {n} media",
+  "media.sendFiles": "Send {n} files",
+  "media.selected": "{n} of {total} selected",
+  "media.caption": "Add a caption…",
+  "media.add": "Add more",
 
   // errors
   "sheet.deleteMessageTitle": "Delete message?",
@@ -534,7 +560,7 @@ const fa: Dict = {
   "settings.themeLight": "روشن",
   "settings.themeAuto": "سیستم",
   "settings.notifications": "اعلان‌ها",
-  "settings.enableNotifications": "نمایش اعلان دسکتاپ",
+  "settings.enableNotifications": "اعلان پیام‌های جدید",
   "settings.sound": "صدا برای پیام جدید",
   "settings.password": "تغییر رمز عبور",
   "settings.currentPassword": "رمز فعلی",
@@ -555,6 +581,29 @@ const fa: Dict = {
   "settings.changePhoto": "تغییر عکس",
   "settings.install": "نصب برنامه",
   "settings.installHint": "پیام‌رسان را به صفحه اصلی اضافه کنید تا مثل یک اپ کامل کار کند.",
+
+  "install.title": "نصب {app}",
+  "install.intro":
+    "{app} را مثل یک اپ نصب کنید: از صفحه اصلی تمام‌صفحه باز می‌شود، سریع‌تر بالا می‌آید و می‌تواند اعلان نشان دهد.",
+  "install.iosShare": "در سافاری روی دکمه اشتراک‌گذاری بزنید",
+  "install.iosAdd": "گزینه «Add to Home Screen» را انتخاب کنید",
+  "install.iosOpen": "{app} را از صفحه اصلی باز کنید و اجازه اعلان بدهید",
+  "install.iosNotify":
+    "در آیفون و آیپد اعلان‌ها فقط وقتی می‌رسند که برنامه از طریق مرورگر Safari به صفحه اصلی اضافه شده باشد.",
+  "install.iosNotSafari":
+    "برای دریافت اعلان، این صفحه را در Safari باز کنید و {app} را از همان‌جا به صفحه اصلی اضافه کنید. لینک را کپی کنید و در سافاری باز کنید.",
+  "install.copyLink": "کپی لینک",
+  "install.later": "بعداً",
+  "install.menu": "منوی مرورگر را باز کنید و «نصب برنامه» یا «افزودن به صفحه اصلی» را بزنید.",
+  "notify.title": "روشن کردن اعلان‌ها",
+  "notify.body":
+    "برای هر پیام جدید اعلان بگیرید، حتی وقتی برنامه بسته است. بعداً می‌توانید از تنظیمات تغییرش دهید.",
+  "notify.enable": "روشن کن",
+  "media.sendMedia": "ارسال {n} رسانه",
+  "media.sendFiles": "ارسال {n} فایل",
+  "media.selected": "{n} از {total} انتخاب شده",
+  "media.caption": "افزودن کپشن…",
+  "media.add": "افزودن",
 
   "sheet.deleteMessageTitle": "پیام حذف شود؟",
   "sheet.deleteMessageBody": "پیام برای همه اعضای این گفتگو حذف می‌شود.",

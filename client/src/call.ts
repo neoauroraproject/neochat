@@ -85,11 +85,43 @@ function stopTone() {
   tone = null;
 }
 
+const camera = (facing: "user" | "environment"): MediaTrackConstraints => ({
+  facingMode: facing,
+  width: { ideal: 1280 },
+  height: { ideal: 720 },
+  frameRate: { ideal: 30, max: 30 },
+});
+
 async function getMedia(video: boolean, facing: "user" | "environment" = "user") {
   return navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    video: video ? { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+    video: video ? camera(facing) : false,
   });
+}
+
+/**
+ * Browsers protect the frame rate of a camera by default, so on a busy link or a slow phone the
+ * picture drops to a blurry low resolution first. Allow up to 2.5 Mbps and trade frame rate and
+ * resolution evenly instead. Called after every negotiation, since encodings appear only then.
+ */
+async function tuneVideo(conn: RTCPeerConnection) {
+  for (const sender of conn.getSenders()) {
+    if (sender.track?.kind !== "video") continue;
+    const p = sender.getParameters();
+    if (!p.encodings?.length) continue;
+    p.encodings.forEach((e) => {
+      e.maxBitrate = 2_500_000;
+      e.maxFramerate = 30;
+      e.scaleResolutionDownBy = 1;
+    });
+    (p as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference =
+      "balanced";
+    try {
+      await sender.setParameters(p);
+    } catch {
+      /* older browsers reject some fields; the defaults still work */
+    }
+  }
 }
 
 async function createPeer(): Promise<RTCPeerConnection> {
@@ -117,6 +149,7 @@ async function createPeer(): Promise<RTCPeerConnection> {
   conn.onconnectionstatechange = () => {
     const s = conn.connectionState;
     if (s === "connected") {
+      tuneVideo(conn);
       useCall.setState((st) => ({
         phase: "active",
         reconnecting: false,
@@ -280,10 +313,12 @@ export const useCall = create<CallState>((set, getState) => ({
     if (!st.video || !st.localStream) return;
     const facing = st.facing === "user" ? "environment" : "user";
     try {
-      const cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
+      // Same constraints as the first camera; a bare facingMode request falls back to 640×480.
+      const cam = await navigator.mediaDevices.getUserMedia({ video: camera(facing) });
       const track = cam.getVideoTracks()[0];
       const sender = pc?.getSenders().find((s) => s.track?.kind === "video");
       await sender?.replaceTrack(track);
+      if (pc) tuneVideo(pc);
       st.localStream.getVideoTracks().forEach((tr) => {
         tr.stop();
         st.localStream!.removeTrack(tr);
@@ -348,6 +383,7 @@ onEvent("call_accepted", async (d) => {
   pc = await createPeer();
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
+  tuneVideo(pc);
   signal({ type: "offer", sdp: offer.sdp });
 });
 
@@ -363,6 +399,7 @@ onEvent("call_signal", async (d) => {
       await pc.setRemoteDescription({ type: "offer", sdp: data.sdp });
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      tuneVideo(pc);
       signal({ type: "answer", sdp: answer.sdp });
       for (const c of pendingCandidates.splice(0)) await pc.addIceCandidate(c);
     } else if (data.type === "answer") {
