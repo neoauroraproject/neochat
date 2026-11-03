@@ -239,6 +239,8 @@ type pushPayload struct {
 	Body   string `json:"body"`
 	ChatID int64  `json:"chatId"`
 	Tag    string `json:"tag"`
+	// Ring marks an incoming call: the notification stays up and vibrates like a ringtone.
+	Ring bool `json:"ring,omitempty"`
 }
 
 var mediaLabels = map[string][2]string{ // kind -> {en, fa}
@@ -249,18 +251,46 @@ var mediaLabels = map[string][2]string{ // kind -> {en, fa}
 	"file":  {"📎 File", "📎 فایل"},
 }
 
-// pushText is the notification for one reader, in their language.
-func pushText(m *Message, chatType, chatTitle, lang string) pushPayload {
+var callLabels = map[string][2]string{ // "<state>:<video>" -> {en, fa}
+	"incoming:false": {"📞 Incoming call…", "📞 تماس ورودی…"},
+	"incoming:true":  {"📹 Incoming video call…", "📹 تماس تصویری ورودی…"},
+	"missed:false":   {"📞 Missed call", "📞 تماس از دست رفته"},
+	"missed:true":    {"📹 Missed video call", "📹 تماس تصویری از دست رفته"},
+}
+
+func pick(l [2]string, lang string) string {
+	if lang == "fa" {
+		return l[1]
+	}
+	return l[0]
+}
+
+// callTag is shared by the ringing and the missed-call notification of a chat, so the
+// "missed call" replaces "incoming call" instead of stacking under it.
+func callTag(chatID int64) string { return fmt.Sprintf("call-%d", chatID) }
+
+// pushText is the notification for one reader, in their language. ok is false for messages
+// that should not notify, such as the log line of a call that was answered.
+func pushText(m *Message, chatType, chatTitle, lang string) (p pushPayload, ok bool) {
+	if m.Kind == "call" {
+		// The text of a call message is {"status":..., "video":..., "duration":...}.
+		var c struct {
+			Status string `json:"status"`
+			Video  bool   `json:"video"`
+		}
+		json.Unmarshal([]byte(m.Text), &c)
+		if c.Status != "missed" && c.Status != "cancelled" {
+			return p, false
+		}
+		label := callLabels[fmt.Sprintf("missed:%v", c.Video)]
+		return pushPayload{Title: m.Sender.DisplayName, Body: pick(label, lang), ChatID: m.ChatID, Tag: callTag(m.ChatID)}, true
+	}
 	body := m.Text
 	if l, ok := mediaLabels[m.Kind]; ok {
-		label := l[0]
-		if lang == "fa" {
-			label = l[1]
-		}
 		if body == "" {
-			body = label
+			body = pick(l, lang)
 		} else {
-			body = label + " " + body
+			body = pick(l, lang) + " " + body
 		}
 	}
 	if r := []rune(body); len(r) > 180 {
@@ -273,48 +303,46 @@ func pushText(m *Message, chatType, chatTitle, lang string) pushPayload {
 	case "channel":
 		title = chatTitle
 	}
-	return pushPayload{Title: title, Body: body, ChatID: m.ChatID, Tag: fmt.Sprintf("chat-%d", m.ChatID)}
+	return pushPayload{Title: title, Body: body, ChatID: m.ChatID, Tag: fmt.Sprintf("chat-%d", m.ChatID)}, true
 }
 
-// pushMessage notifies every member's subscribed devices, except the sender and muted chats.
-func (s *Server) pushMessage(m *Message) {
-	if m.Kind == "system" || m.Sender == nil {
-		return
-	}
-	var chatType, chatTitle string
-	if err := s.db.QueryRow(`SELECT type, title FROM chats WHERE id=?`, m.ChatID).Scan(&chatType, &chatTitle); err != nil {
-		return
-	}
-	rows, err := s.db.Query(`
-SELECT p.id, p.endpoint, p.p256dh, p.auth, p.lang FROM push_subscriptions p
-JOIN chat_members cm ON cm.user_id=p.user_id AND cm.chat_id=?
-JOIN users u ON u.id=p.user_id
-WHERE cm.muted=0 AND p.user_id<>? AND u.banned=0 AND u.deleted=0`, m.ChatID, m.SenderID)
+type pushSub struct {
+	id                           int64
+	endpoint, p256dh, auth, lang string
+}
+
+// subscriptions of active users; the query selects id, endpoint, p256dh, auth, lang.
+func (s *Server) pushSubs(query string, args ...any) []pushSub {
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		log.Printf("push: %v", err)
-		return
+		return nil
 	}
-	type sub struct {
-		id                           int64
-		endpoint, p256dh, auth, lang string
-	}
-	var subs []sub
+	defer rows.Close()
+	var subs []pushSub
 	for rows.Next() {
-		var x sub
+		var x pushSub
 		if rows.Scan(&x.id, &x.endpoint, &x.p256dh, &x.auth, &x.lang) == nil {
 			subs = append(subs, x)
 		}
 	}
-	rows.Close()
+	return subs
+}
 
-	work := make(chan sub)
+// deliver sends one notification per subscription, a few at a time, and forgets the dead ones.
+func (s *Server) deliver(subs []pushSub, build func(lang string) (pushPayload, bool)) {
+	work := make(chan pushSub)
 	var wg sync.WaitGroup
 	for i := 0; i < min(8, len(subs)); i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for x := range work {
-				payload, _ := json.Marshal(pushText(m, chatType, chatTitle, x.lang))
+				p, ok := build(x.lang)
+				if !ok {
+					continue
+				}
+				payload, _ := json.Marshal(p)
 				gone, err := s.sendPush(x.endpoint, x.p256dh, x.auth, payload)
 				if gone {
 					s.db.Exec(`DELETE FROM push_subscriptions WHERE id=?`, x.id)
@@ -329,6 +357,38 @@ WHERE cm.muted=0 AND p.user_id<>? AND u.banned=0 AND u.deleted=0`, m.ChatID, m.S
 	}
 	close(work)
 	wg.Wait()
+}
+
+func (s *Server) hasPush(uid int64) bool {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM push_subscriptions WHERE user_id=?`, uid).Scan(&n)
+	return n > 0
+}
+
+// pushMessage notifies every member's subscribed devices, except the sender and muted chats.
+func (s *Server) pushMessage(m *Message) {
+	if m.Kind == "system" || m.Sender == nil {
+		return
+	}
+	var chatType, chatTitle string
+	if err := s.db.QueryRow(`SELECT type, title FROM chats WHERE id=?`, m.ChatID).Scan(&chatType, &chatTitle); err != nil {
+		return
+	}
+	subs := s.pushSubs(`
+SELECT p.id, p.endpoint, p.p256dh, p.auth, p.lang FROM push_subscriptions p
+JOIN chat_members cm ON cm.user_id=p.user_id AND cm.chat_id=?
+JOIN users u ON u.id=p.user_id
+WHERE cm.muted=0 AND p.user_id<>? AND u.banned=0 AND u.deleted=0`, m.ChatID, m.SenderID)
+	s.deliver(subs, func(lang string) (pushPayload, bool) { return pushText(m, chatType, chatTitle, lang) })
+}
+
+// pushCall rings the callee's devices; calls ring even in a muted chat, like a phone.
+func (s *Server) pushCall(call *Call, from *User) {
+	subs := s.pushSubs(`SELECT id, endpoint, p256dh, auth, lang FROM push_subscriptions WHERE user_id=?`, call.CalleeID)
+	label := fmt.Sprintf("incoming:%v", call.Video)
+	s.deliver(subs, func(lang string) (pushPayload, bool) {
+		return pushPayload{Title: from.DisplayName, Body: pick(callLabels[label], lang), ChatID: call.ChatID, Tag: callTag(call.ChatID), Ring: true}, true
+	})
 }
 
 func (s *Server) handlePushKey(w http.ResponseWriter, r *http.Request, u *User) error {

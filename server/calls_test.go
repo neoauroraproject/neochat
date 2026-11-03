@@ -1,0 +1,128 @@
+package main
+
+import (
+	"crypto/ecdh"
+	"crypto/rand"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+func newCallTestServer(t *testing.T) *Server {
+	t.Helper()
+	db, err := openDB(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	vapidCached = nil
+	s := &Server{db: db, limiter: newLimiter()}
+	s.hub = newHub(s)
+	s.calls = newCallManager(s)
+	if err := s.loadSettings(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"caller", "pushable", "unreachable"} {
+		if _, err := db.Exec(`INSERT INTO users(username, display_name, password_hash, created_at) VALUES(?,?,'x',?)`, name, strings.ToUpper(name[:1])+name[1:], nowMs()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return s
+}
+
+// nextEvent reads the next event of the given type a test client received.
+func nextEvent(t *testing.T, c *Client, want string) map[string]any {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case b := <-c.send:
+			var ev struct {
+				T string         `json:"t"`
+				D map[string]any `json:"d"`
+			}
+			json.Unmarshal(b, &ev)
+			if ev.T == want {
+				return ev.D
+			}
+			if ev.T == "call_failed" {
+				t.Fatalf("waiting for %s, got call_failed %v", want, ev.D)
+			}
+		case <-deadline:
+			t.Fatalf("no %s event", want)
+		}
+	}
+}
+
+// A callee whose app is in the background has no connection but can be woken by a push:
+// the call must ring (not fail as "offline"), push an "incoming call", and reach the app
+// as soon as it connects.
+func TestCallRingsOfflineUserThroughPush(t *testing.T) {
+	s := newCallTestServer(t)
+
+	uaKey, _ := ecdh.P256().GenerateKey(rand.Reader)
+	secret := make([]byte, 16)
+	rand.Read(secret)
+	got := make(chan []byte, 4)
+	ps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got <- b
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer ps.Close()
+	res, _ := s.db.Exec(`INSERT INTO sessions(token_hash, user_id, created_at, last_used) VALUES('h',2,0,0)`)
+	sid, _ := res.LastInsertId()
+	if _, err := s.db.Exec(`INSERT INTO push_subscriptions(user_id, session_id, endpoint, p256dh, auth, lang, created_at) VALUES(2,?,?,?,?,'fa',0)`,
+		sid, ps.URL+"/sub", b64.EncodeToString(uaKey.PublicKey().Bytes()), b64.EncodeToString(secret)); err != nil {
+		t.Fatal(err)
+	}
+
+	caller := &Client{hub: s.hub, userID: 1, send: make(chan []byte, 32)}
+	s.hub.add(caller)
+	s.calls.invite(caller, 2, true, "r1")
+	created := nextEvent(t, caller, "call_created")
+
+	select {
+	case body := <-got:
+		var p pushPayload
+		json.Unmarshal(decryptPush(t, body, uaKey, secret), &p)
+		if !p.Ring || p.Title != "Caller" || p.Body != "📹 تماس تصویری ورودی…" {
+			t.Fatalf("incoming call push: %+v", p)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no incoming-call push")
+	}
+
+	callee := &Client{hub: s.hub, userID: 2, send: make(chan []byte, 32)}
+	s.hub.add(callee)
+	s.calls.ringIfWaiting(callee)
+	incoming := nextEvent(t, callee, "call_incoming")
+	if incoming["callId"] != created["callId"] || incoming["video"] != true {
+		t.Fatalf("call_incoming %v does not match call %v", incoming, created)
+	}
+	s.calls.finish(created["callId"].(string), 1, "ended")
+}
+
+func TestCallFailsForUnreachableUser(t *testing.T) {
+	s := newCallTestServer(t)
+	caller := &Client{hub: s.hub, userID: 1, send: make(chan []byte, 32)}
+	s.hub.add(caller)
+	s.calls.invite(caller, 3, false, "r2")
+	for {
+		select {
+		case b := <-caller.send:
+			if strings.Contains(string(b), `"call_failed"`) {
+				if !strings.Contains(string(b), `"offline"`) {
+					t.Fatalf("want offline, got %s", b)
+				}
+				return
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("no call_failed for a user with no connection and no push")
+		}
+	}
+}

@@ -131,11 +131,25 @@ func TestPushEndpointAllowlist(t *testing.T) {
 
 func TestPushText(t *testing.T) {
 	m := &Message{ChatID: 3, Kind: "image", Text: "", Sender: &MessageSender{DisplayName: "Ali"}}
-	if p := pushText(m, "group", "Team", "fa"); p.Title != "Team" || p.Body != "Ali: 📷 عکس" {
+	if p, ok := pushText(m, "group", "Team", "fa"); !ok || p.Title != "Team" || p.Body != "Ali: 📷 عکس" {
 		t.Fatalf("group photo: %+v", p)
 	}
 	m.Kind, m.Text = "text", "hi"
-	if p := pushText(m, "direct", "", "en"); p.Title != "Ali" || p.Body != "hi" {
+	if p, ok := pushText(m, "direct", "", "en"); !ok || p.Title != "Ali" || p.Body != "hi" {
 		t.Fatalf("direct text: %+v", p)
+	}
+
+	// Call log lines carry JSON; a missed call reads as one, an answered call does not notify.
+	m.Kind, m.Text = "call", `{"duration":0,"status":"missed","video":true}`
+	if p, ok := pushText(m, "direct", "", "fa"); !ok || p.Body != "📹 تماس تصویری از دست رفته" || p.Tag != "call-3" {
+		t.Fatalf("missed call: %+v", p)
+	}
+	m.Text = `{"duration":0,"status":"cancelled","video":false}`
+	if p, ok := pushText(m, "direct", "", "en"); !ok || p.Body != "📞 Missed call" {
+		t.Fatalf("cancelled call: %+v", p)
+	}
+	m.Text = `{"duration":20,"status":"ended","video":true}`
+	if p, ok := pushText(m, "direct", "", "en"); ok {
+		t.Fatalf("answered call must not notify, got %+v", p)
 	}
 }

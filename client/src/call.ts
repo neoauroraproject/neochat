@@ -182,8 +182,18 @@ function signal(data: unknown) {
   if (id) wsSend("call_signal", { callId: id, data });
 }
 
+/** Removes the "incoming call" notification once the call is answered, declined or over. */
+function clearCallNotice(chatId: number | null) {
+  if (!chatId || !navigator.serviceWorker?.controller) return;
+  navigator.serviceWorker.ready
+    .then((reg) => reg.getNotifications({ tag: `call-${chatId}` }))
+    .then((list) => list.forEach((n) => n.close()))
+    .catch(() => {});
+}
+
 function cleanup(reason = "") {
   stopTone();
+  clearCallNotice(useCall.getState().chatId);
   pc?.close();
   pc = null;
   pendingCandidates = [];
@@ -267,6 +277,7 @@ export const useCall = create<CallState>((set, getState) => ({
     const st = getState();
     if (st.phase !== "incoming" || !st.callId) return;
     stopTone();
+    clearCallNotice(st.chatId);
     isCaller = false;
     set({ phase: "connecting" });
     try {

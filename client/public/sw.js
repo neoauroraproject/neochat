@@ -98,6 +98,9 @@ self.addEventListener("push", (e) => {
         renotify: !!d.tag,
         icon: "/icon.svg",
         data: { chatId: d.chatId },
+        // An incoming call stays on screen and buzzes like a ringtone until it is handled.
+        requireInteraction: !!d.ring,
+        vibrate: d.ring ? [400, 200, 400, 200, 400, 200, 400] : undefined,
       });
     })(),
   );

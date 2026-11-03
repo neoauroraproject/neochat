@@ -104,10 +104,13 @@ func (m *CallManager) invite(c *Client, to int64, video bool, ref string) {
 		fail("busy_self")
 		return
 	}
-	if m.byUser[to] != nil || !s.hub.online(to) {
+	// A phone with the app in the background has no live connection, but a push can still wake it:
+	// keep ringing while it opens. Only someone with neither is really unreachable.
+	online, pushable := s.hub.online(to), s.hasPush(to)
+	if m.byUser[to] != nil || (!online && !pushable) {
 		m.mu.Unlock()
 		reason := "busy"
-		if !s.hub.online(to) {
+		if m.byUser[to] == nil {
 			reason = "offline"
 		}
 		fail(reason)
@@ -118,14 +121,41 @@ func (m *CallManager) invite(c *Client, to int64, video bool, ref string) {
 	m.calls[call.ID] = call
 	m.byUser[c.userID] = call
 	m.byUser[to] = call
-	call.timer = time.AfterFunc(time.Duration(st.CallRingSeconds)*time.Second, func() {
+	ring := time.Duration(st.CallRingSeconds) * time.Second
+	if !online && ring < 45*time.Second {
+		ring = 45 * time.Second // time to see the notification, tap it and let the app connect
+	}
+	call.timer = time.AfterFunc(ring, func() {
 		m.finish(call.ID, 0, "missed")
 	})
 	m.mu.Unlock()
 
 	me, _ := s.userByID(c.userID)
 	c.push(encodeEvent("call_created", map[string]any{"ref": ref, "callId": call.ID, "chatId": chatID, "peer": s.public(peer, c.userID), "video": video}))
-	s.hub.sendTo(to, "call_incoming", map[string]any{"callId": call.ID, "chatId": chatID, "from": s.public(me, to), "video": video})
+	s.hub.sendTo(to, "call_incoming", m.incomingEvent(call, me, to))
+	// Always push as well: a backgrounded iPhone can look connected while its socket is frozen.
+	if pushable {
+		go s.pushCall(call, me)
+	}
+}
+
+func (m *CallManager) incomingEvent(call *Call, from *User, to int64) map[string]any {
+	return map[string]any{"callId": call.ID, "chatId": call.ChatID, "from": m.s.public(from, to), "video": call.Video}
+}
+
+// ringIfWaiting hands a still-ringing call to a device that has just connected, e.g. the
+// app opened from the "incoming call" notification.
+func (m *CallManager) ringIfWaiting(c *Client) {
+	m.mu.Lock()
+	call := m.byUser[c.userID]
+	ringing := call != nil && call.Status == "ringing" && call.CalleeID == c.userID
+	m.mu.Unlock()
+	if !ringing {
+		return
+	}
+	if from, err := m.s.userByID(call.CallerID); err == nil {
+		c.push(encodeEvent("call_incoming", m.incomingEvent(call, from, c.userID)))
+	}
 }
 
 func (m *CallManager) accept(c *Client, callID string) {

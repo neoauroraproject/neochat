@@ -209,6 +209,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if first {
 		s.setPresence(u.ID, true)
 	}
+	s.calls.ringIfWaiting(c)
 	go c.writeLoop()
 	c.readLoop(s)
 }
