@@ -42,6 +42,11 @@ type tlsManager struct {
 	cert *tls.Certificate
 	acme *autocert.Manager
 	err  string
+	// In Let's Encrypt mode the self-signed certificate still answers requests by IP or another name,
+	// and covers the pause after a failed order, so a DNS or firewall mistake never takes the app down.
+	fallback *tls.Certificate
+	retryAt  time.Time
+	issued   bool
 }
 
 func newTLSManager(s *Server) *tlsManager {
@@ -106,6 +111,9 @@ func (m *tlsManager) apply() error {
 	defer m.mu.Unlock()
 	m.err = ""
 	m.acme = nil
+	m.fallback = nil
+	m.retryAt = time.Time{}
+	m.issued = false
 	switch m.cfg.Mode {
 	case "custom":
 		cp, kp := m.customPaths()
@@ -125,7 +133,18 @@ func (m *tlsManager) apply() error {
 			HostPolicy: autocert.HostWhitelist(m.cfg.Domain),
 			Email:      m.cfg.Email,
 		}
+		// autocert only offers http-01 after HTTPHandler has been called; without this, a server that is
+		// not on port 443 could only be validated once some request happened to reach port 80.
+		if m.s.opts.HTTPPort != "" {
+			m.acme.HTTPHandler(nil)
+		}
 		m.cert = nil
+		hosts := append(strings.Split(m.cfg.Hosts, ","), m.cfg.Domain)
+		if cp, kp, err := ensureSelfSigned(m.s.opts.DataDir, hosts); err == nil {
+			if c, err := tls.LoadX509KeyPair(cp, kp); err == nil {
+				m.fallback = &c
+			}
+		}
 	default:
 		m.cfg.Mode = "self-signed"
 		cp, kp, err := ensureSelfSigned(m.s.opts.DataDir, strings.Split(m.cfg.Hosts, ","))
@@ -143,18 +162,34 @@ func (m *tlsManager) apply() error {
 
 func (m *tlsManager) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	m.mu.RLock()
-	am, cert := m.acme, m.cert
+	am, cert, fb, domain, retryAt := m.acme, m.cert, m.fallback, m.cfg.Domain, m.retryAt
 	m.mu.RUnlock()
-	if am != nil {
-		c, err := am.GetCertificate(hello)
-		if err != nil {
-			m.mu.Lock()
-			m.err = err.Error()
-			m.mu.Unlock()
-		}
-		return c, err
+	if am == nil {
+		return cert, nil
 	}
-	return cert, nil
+	name := strings.TrimSuffix(strings.ToLower(hello.ServerName), ".")
+	challenge := len(hello.SupportedProtos) == 1 && hello.SupportedProtos[0] == acme.ALPNProto
+	if !challenge && fb != nil && (name != domain || time.Now().Before(retryAt)) {
+		return fb, nil
+	}
+	c, err := am.GetCertificate(hello)
+	m.mu.Lock()
+	if err != nil && !challenge {
+		// Let's Encrypt allows only a few failed validations per hour; wait before ordering again.
+		m.retryAt = time.Now().Add(10 * time.Minute)
+		if m.err != err.Error() {
+			log.Printf("tls: let's encrypt for %s failed: %v", domain, err)
+		}
+		m.err = err.Error()
+	} else if err == nil && !challenge && !m.issued {
+		m.issued, m.err = true, ""
+		log.Printf("tls: let's encrypt certificate ready for %s", domain)
+	}
+	m.mu.Unlock()
+	if err != nil && !challenge && fb != nil {
+		return fb, nil
+	}
+	return c, err
 }
 
 func (m *tlsManager) tlsConfig() *tls.Config {
@@ -186,7 +221,8 @@ func (m *tlsManager) status() map[string]any {
 	m.mu.RUnlock()
 	out := map[string]any{"mode": cfg.Mode, "domain": cfg.Domain, "email": cfg.Email, "hosts": cfg.Hosts, "error": errText, "https": m.s.httpsOn}
 	if am != nil && cfg.Domain != "" {
-		if c, err := am.GetCertificate(&tls.ClientHelloInfo{ServerName: cfg.Domain}); err == nil {
+		// Through getCertificate, so viewing the page honours the pause after a failed order.
+		if c, err := m.getCertificate(&tls.ClientHelloInfo{ServerName: cfg.Domain}); err == nil {
 			cert = c
 		}
 	}
@@ -281,4 +317,52 @@ func (s *Server) handleAdminSaveTLS(w http.ResponseWriter, r *http.Request, u *U
 	}
 	writeJSON(w, 200, m.status())
 	return nil
+}
+
+// runTLSCommand switches the certificate mode from the terminal (used by the installer):
+//
+//	neochat tls [-data DIR] status | self-signed | letsencrypt <domain> [email]
+//
+// The server reads the mode when it starts, so restart it afterwards.
+func runTLSCommand(o Options, args []string) {
+	if err := os.MkdirAll(o.DataDir, 0o750); err != nil {
+		log.Fatal(err)
+	}
+	db, err := openDB(o.DataDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	cfg := tlsSettings{Mode: "self-signed"}
+	var raw string
+	if err := db.QueryRow(`SELECT value FROM settings WHERE key='tls'`).Scan(&raw); err == nil {
+		json.Unmarshal([]byte(raw), &cfg)
+	}
+	mode := "status"
+	if len(args) > 0 {
+		mode = args[0]
+	}
+	switch mode {
+	case "status":
+		fmt.Println(cfg.Mode, cfg.Domain)
+		return
+	case "self-signed":
+		cfg.Mode = "self-signed"
+	case "letsencrypt":
+		if len(args) < 2 || !strings.Contains(args[1], ".") {
+			log.Fatal("usage: neochat tls letsencrypt <domain> [email]")
+		}
+		cfg.Mode = "letsencrypt"
+		cfg.Domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(args[1])), ".")
+		if len(args) > 2 {
+			cfg.Email = strings.TrimSpace(args[2])
+		}
+	default:
+		log.Fatal("usage: neochat tls status | self-signed | letsencrypt <domain> [email]")
+	}
+	b, _ := json.Marshal(cfg)
+	if _, err := db.Exec(`INSERT INTO settings(key,value) VALUES('tls',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, string(b)); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("done; restart NeoChat to apply")
 }

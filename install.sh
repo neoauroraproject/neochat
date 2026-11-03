@@ -6,7 +6,7 @@
 # The first run installs NeoChat (asks for ports and creates the admin account) and
 # leaves the `neochat` command behind. Run `neochat` for the menu, or pass a
 # command: install | update | config | uninstall | start | stop | restart | status |
-# logs | reset-password | make-admin | version. Through the one-liner: ... | sudo bash -s -- update
+# ssl | logs | reset-password | make-admin | version. Through the one-liner: ... | sudo bash -s -- update
 # The server binary itself lives in /usr/local/lib/neochat/neochat.
 set -euo pipefail
 
@@ -24,6 +24,8 @@ DEFAULT_DATA=/var/lib/neochat
 # Options (flags override the questions).
 OPT_PORT="" OPT_HTTP="" OPT_TURN="" OPT_DOMAIN="" OPT_DATA=""
 OPT_ADMIN="" OPT_PASSWORD="" OPT_APPNAME="" OPT_VERSION="${NEOCHAT_VERSION:-}"
+OPT_EMAIL="" OPT_SSL=""
+WANT_LE=0 SSL_OK=0 EMAIL=""
 ASSUME_YES=0 PURGE=0 FORCE=0
 
 if [ -t 1 ]; then
@@ -300,6 +302,120 @@ firewall_rules() {
   printf '%s\n' "${rules[@]}"
 }
 
+# ---------------------------------------------------------------- certificates
+
+# `neochat help` exits 2, so read its output first: piping it into grep would fail under pipefail.
+tls_supported() {
+  local out
+  out=$("$BIN" help 2>&1 || true)
+  [[ $out == *"neochat tls"* ]]
+}
+tls_cli() { runuser -u neochat -- "$BIN" tls -data "$DATA" "$@"; }
+tls_mode() { tls_supported && tls_cli status 2>/dev/null || echo "self-signed"; }
+
+# The certificate the server is really presenting for a name: "issuer|expiry date".
+tls_peek() {
+  has openssl || return 1
+  echo | openssl s_client -connect "127.0.0.1:$HTTPS_PORT" -servername "$1" 2>/dev/null |
+    openssl x509 -noout -issuer -enddate 2>/dev/null |
+    sed -n 's/^issuer=.*CN *= *\([^,]*\).*/\1/p; s/^notAfter=//p' | paste -sd'|' -
+}
+
+# Before asking Let's Encrypt: the domain must point here and NeoChat must own port 80 or 443,
+# because that is where Let's Encrypt checks the domain from.
+tls_check() {
+  local d=$1 ips mine pub="" ip match=0 owner
+  if ! [[ $d =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]]; then
+    warn "\"$d\" is not a domain name"
+    return 1
+  fi
+  ips=$(getent ahostsv4 "$d" 2>/dev/null | awk '{print $1}' | sort -u | tr '\n' ' ' || true)
+  if [ -z "${ips// /}" ]; then
+    warn "$d does not resolve yet. Add an A record that points to this server, wait a few minutes, then run: neochat ssl"
+    return 1
+  fi
+  mine=" $(hostname -I 2>/dev/null) "
+  for ip in $ips; do [[ $mine == *" $ip "* ]] && match=1; done
+  if [ "$match" = 0 ] && has curl; then
+    pub=$(curl -s4 --max-time 5 https://api.ipify.org 2>/dev/null || true)
+    for ip in $ips; do [ "$ip" = "$pub" ] && match=1; done
+  fi
+  if [ "$match" = 1 ]; then
+    ok "$d points to this server"
+  elif [ -n "$pub" ]; then
+    warn "$d points to ${ips% } but this server's public IP is $pub"
+    confirm "Try anyway (for example behind a proxy)?" n || return 1
+  else
+    warn "could not confirm that $d points here (it resolves to ${ips% })"
+    confirm "Continue?" y || return 1
+  fi
+
+  if [ "$HTTPS_PORT" != 443 ] && [ "$HTTP_PORT" != 80 ]; then
+    if owner=$(port_owner 80 tcp); then
+      warn "Let's Encrypt checks the domain on port 80 or 443, but NeoChat uses $HTTPS_PORT and port 80 is taken by $owner."
+      warn "Free port 80 (or move NeoChat to 443 with: neochat config), then run: neochat ssl"
+      return 1
+    fi
+    if confirm "Let's Encrypt needs port 80 for the check. Use port 80 for NeoChat's HTTP redirect?" y; then
+      HTTP_PORT=80
+      HTTP_CHANGED=1
+    else
+      return 1
+    fi
+  fi
+}
+
+# Switch to Let's Encrypt, restart, and wait until a trusted certificate is served for the domain.
+# On failure the self-signed certificate comes back, so the app stays reachable.
+tls_issue() {
+  local d=$1 e=${2:-} since reason peek
+  if ! tls_supported; then
+    warn "this NeoChat version cannot request certificates from the terminal; run: neochat update (or use Admin > SSL)"
+    return 1
+  fi
+  since=$(date '+%Y-%m-%d %H:%M:%S')
+  if [ -n "$e" ]; then tls_cli letsencrypt "$d" "$e" >/dev/null; else tls_cli letsencrypt "$d" >/dev/null; fi
+  service_start
+  say "Requesting a Let's Encrypt certificate for $d (this can take a minute)"
+  if curl -s --max-time 150 --resolve "$d:$HTTPS_PORT:127.0.0.1" -o /dev/null "https://$d:$HTTPS_PORT/api/config"; then
+    SSL_OK=1
+    DOMAIN=$d
+    write_env
+    peek=$(tls_peek "$d" || true)
+    ok "trusted certificate installed for $d${peek:+ (${peek%%|*}, valid until ${peek#*|})}"
+    ok "it renews automatically; keep port ${HTTP_PORT/off/443} reachable from the internet"
+    return 0
+  fi
+  reason=$(journalctl -u "$SERVICE" --since "$since" --no-pager -o cat 2>/dev/null | grep "tls: let's encrypt for" | tail -n1 | sed 's/.*failed: //')
+  warn "Let's Encrypt did not issue a certificate for $d"
+  [ -n "$reason" ] && printf '  %sreason:%s %s\n' "$C_B" "$C_0" "$reason" >&2
+  printf '  Check that %s has an A record for this server (no proxy in front), and that ports 80/443\n' "$d" >&2
+  printf '  are open in your cloud firewall too. Then try again with: neochat ssl\n' >&2
+  tls_cli self-signed >/dev/null
+  service_start
+  say "back on the self-signed certificate; the app keeps working"
+  return 1
+}
+
+# Decide during install/config whether to ask Let's Encrypt for the domain just entered.
+ask_ssl() {
+  WANT_LE=0
+  [ -n "$DOMAIN" ] || return 0
+  [ "$OPT_SSL" != no ] || return 0
+  if ! tls_supported; then
+    warn "this NeoChat release cannot request certificates from the installer; use Admin > SSL after setup"
+    return 0
+  fi
+  if ! confirm "Get a free Let's Encrypt certificate for $DOMAIN?" y; then
+    return 0
+  fi
+  EMAIL=$(ask "Email for expiry notices (optional)" "$OPT_EMAIL")
+  EMAIL=${EMAIL// /}
+  HTTP_CHANGED=0
+  tls_check "$DOMAIN" && WANT_LE=1
+  return 0
+}
+
 service_stop() { has_systemd && systemctl stop "$SERVICE" 2>/dev/null || true; }
 
 # Start the service and wait until the web app answers.
@@ -420,7 +536,11 @@ summary() {
   [ -n "${ADMIN_PASS:-}" ] && printf '  Password     %s%s%s  %s(generated, save it now)%s\n' "$C_B" "$ADMIN_PASS" "$C_0" "$C_DIM" "$C_0"
   printf '  Data         %s\n' "$DATA"
   printf '  Ports        https %s, http redirect %s, call relay %s tcp+udp\n' "$HTTPS_PORT" "$HTTP_PORT" "${TURN_PORT:-3478}"
-  printf '\n  The certificate is self-signed; get a real one in Admin > SSL.\n'
+  if [ "$SSL_OK" = 1 ]; then
+    printf '  Certificate  Let'"'"'s Encrypt for %s (renews automatically)\n' "$DOMAIN"
+  else
+    printf '\n  The certificate is self-signed; get a free trusted one with: %sneochat ssl%s\n' "$C_B" "$C_0"
+  fi
   printf '  Open the manager any time with: %sneochat%s\n\n' "$C_B" "$C_0"
 }
 
@@ -444,8 +564,9 @@ cmd_install() {
   service_stop
   ask_ports
   ask_domain
-
   place_binary
+  ask_ssl
+
   ok "installed $("$BIN" version | head -n1)"
   id neochat >/dev/null 2>&1 || useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin neochat
   mkdir -p "$DATA"
@@ -458,6 +579,7 @@ cmd_install() {
   say "Starting NeoChat"
   service_start
   first_setup
+  [ "$WANT_LE" = 1 ] && tls_issue "$DOMAIN" "$EMAIL" || true
   summary
 }
 
@@ -494,14 +616,59 @@ cmd_config() {
   HTTP_PORT=$(pick_port "HTTP port that redirects to HTTPS (or 'off')" "$OPT_HTTP" tcp 1)
   [ "$HTTP_PORT" != "$HTTPS_PORT" ] || die "the HTTP and HTTPS ports must differ"
   ask_domain
+  case "$(tls_mode)" in
+    letsencrypt\ "$DOMAIN") ;; # already trusted for this domain
+    *) ask_ssl ;;
+  esac
   write_env
   write_unit
   TURN_PORT=""
   mapfile -t rules < <(firewall_rules)
   open_firewall "${rules[@]}"
   service_start
+  [ "$WANT_LE" = 1 ] && tls_issue "$DOMAIN" "$EMAIL" || true
   ok "saved; the call relay port is changed in Admin > Calls"
   printf '  Web app  %s\n' "$(app_url)"
+}
+
+# neochat ssl [domain] | neochat ssl off
+cmd_ssl() {
+  need_root
+  installed || die "NeoChat is not installed"
+  load_config
+  tls_supported || die "this NeoChat version cannot switch certificates from the terminal; run: neochat update"
+  local arg=${1:-} cur d
+  if [ "$arg" = off ] || [ "$arg" = self-signed ]; then
+    tls_cli self-signed >/dev/null
+    service_start
+    ok "switched to the self-signed certificate"
+    return
+  fi
+  cur=$(tls_mode)
+  if [ "${cur%% *}" = letsencrypt ]; then
+    printf "Current certificate: Let's Encrypt for %s\n" "${cur#* }"
+  else
+    printf 'Current certificate: self-signed\n'
+  fi
+  printf "\n%sLet's Encrypt%s %s(free, trusted by every browser, renews by itself)%s\n" "$C_B" "$C_0" "$C_DIM" "$C_0"
+  d=$(ask "Domain that points to this server" "${arg:-${OPT_DOMAIN:-$DOMAIN}}")
+  d=${d// /}
+  [ -n "$d" ] || die "a domain is required"
+  EMAIL=$(ask "Email for expiry notices (optional)" "$OPT_EMAIL")
+  EMAIL=${EMAIL// /}
+  HTTP_CHANGED=0
+  tls_check "$d" || return 1
+  DOMAIN=$d
+  write_env
+  if [ "$HTTP_CHANGED" = 1 ]; then
+    write_unit
+    open_firewall "80/tcp"
+  fi
+  if tls_issue "$d" "$EMAIL"; then
+    printf '  Web app  %s\n' "$(app_url)"
+  else
+    return 1
+  fi
 }
 
 cmd_uninstall() {
@@ -531,6 +698,7 @@ cmd_uninstall() {
 }
 
 cmd_status() {
+  need_root
   installed || {
     say "NeoChat is not installed"
     return
@@ -542,6 +710,14 @@ cmd_status() {
   printf '  Web app      %s\n' "$(app_url)"
   printf '  Admin panel  %sadmin\n' "$(app_url)"
   printf '  Ports        https %s, http redirect %s\n' "$HTTPS_PORT" "$HTTP_PORT"
+  local mode peek
+  mode=$(tls_mode)
+  if [ "${mode%% *}" = letsencrypt ]; then
+    peek=$(tls_peek "${mode#* }" || true)
+    printf '  Certificate  Let'"'"'s Encrypt for %s%s\n' "${mode#* }" "${peek:+ (${peek%%|*}, until ${peek#*|})}"
+  else
+    printf '  Certificate  self-signed  %s(get a trusted one: neochat ssl)%s\n' "$C_DIM" "$C_0"
+  fi
   printf '  Data         %s\n' "$DATA"
   printf '  Settings     %s\n' "$ENV_FILE"
 }
@@ -582,6 +758,7 @@ Commands:
   install           install NeoChat (asks for ports and the admin account)
   update            update to the latest release (--version vX.Y.Z to pick one)
   config            change ports and domain
+  ssl [domain|off]  get a free Let's Encrypt certificate (or go back to self-signed)
   uninstall         remove NeoChat (--purge also deletes all data)
   start|stop|restart|status|logs
   reset-password    set a user's password: reset-password <user> [password]
@@ -592,13 +769,15 @@ Install options:
   --port N          HTTPS port (default: 443, or the first free of 8443, 2053, ...)
   --http-port N     HTTP redirect port, or 'off' (default: 80 when free)
   --turn-port N     call relay port, tcp+udp (default: 3478)
-  --domain NAME     domain name for the certificate and links
+  --domain NAME     domain name; also requests a Let's Encrypt certificate for it
+  --email ADDR      email for Let's Encrypt expiry notices
+  --no-ssl          keep the self-signed certificate even with --domain
   --data DIR        data directory (default: $DEFAULT_DATA)
   --admin USER      admin username       --password PASS   admin password
   --app-name NAME   app name             -y, --yes         use defaults, no questions
   --force           reinstall / redownload even when up to date
 
-Through the one-liner: curl -fsSL $RAW | sudo bash -s -- install --port 8443 -y
+Through the one-liner: curl -fsSL $RAW | sudo bash -s -- install --port 8443 --domain chat.example.com -y
 EOF
 }
 
@@ -617,21 +796,22 @@ menu() {
     else
       printf '%snot installed%s\n\n' "$C_DIM" "$C_0"
     fi
-    printf '  1) Install          2) Update           3) Change ports / domain\n'
-    printf '  4) Start            5) Stop             6) Restart\n'
-    printf '  7) Status           8) Logs             9) Reset a password\n'
-    printf ' 10) Uninstall        0) Exit\n\n'
+    printf '  1) Install              2) Update               3) Change ports / domain\n'
+    printf '  4) Domain SSL           5) Status               6) Logs\n'
+    printf '  7) Start                8) Stop                 9) Restart\n'
+    printf ' 10) Reset a password    11) Uninstall            0) Exit\n\n'
     case "$(ask "Choose" "0")" in
       1) cmd_install ;;
       2) cmd_update ;;
       3) cmd_config ;;
-      4) systemctl start "$SERVICE" && ok "started" ;;
-      5) systemctl stop "$SERVICE" && ok "stopped" ;;
-      6) systemctl restart "$SERVICE" && ok "restarted" ;;
-      7) cmd_status ;;
-      8) journalctl -u "$SERVICE" -n 60 --no-pager ;;
-      9) cmd_reset_password ;;
-      10) cmd_uninstall && installed || return 0 ;;
+      4) cmd_ssl || true ;;
+      5) cmd_status ;;
+      6) journalctl -u "$SERVICE" -n 60 --no-pager ;;
+      7) systemctl start "$SERVICE" && ok "started" ;;
+      8) systemctl stop "$SERVICE" && ok "stopped" ;;
+      9) systemctl restart "$SERVICE" && ok "restarted" ;;
+      10) cmd_reset_password ;;
+      11) cmd_uninstall && installed || return 0 ;;
       0 | q | exit) return 0 ;;
       *) warn "unknown choice" ;;
     esac
@@ -650,6 +830,9 @@ while [ $# -gt 0 ]; do
     --http-port) OPT_HTTP=${2:?}; shift ;;
     --turn-port) OPT_TURN=${2:?}; shift ;;
     --domain) OPT_DOMAIN=${2:?}; shift ;;
+    --email) OPT_EMAIL=${2:?}; shift ;;
+    --ssl) OPT_SSL=yes ;;
+    --no-ssl) OPT_SSL=no ;;
     --data) OPT_DATA=${2:?}; shift ;;
     --admin) OPT_ADMIN=${2:?}; shift ;;
     --password) OPT_PASSWORD=${2:?}; shift ;;
@@ -670,6 +853,7 @@ case "$CMD" in
   install) cmd_install ;;
   update | upgrade) cmd_update ;;
   config | ports) cmd_config ;;
+  ssl | tls | certificate) cmd_ssl "${POS[@]+"${POS[@]}"}" ;;
   uninstall | remove) cmd_uninstall ;;
   status | info) cmd_status ;;
   start | stop | restart) need_root && systemctl "$CMD" "$SERVICE" && ok "$CMD done" ;;

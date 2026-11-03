@@ -24,7 +24,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var version = "1.3.0"
+var version = "1.4.0"
 
 // defaultAdFeed is the NeoAurora license worker that serves network ads (override with -ad-feed).
 var defaultAdFeed = "https://license.hossein-m466.workers.dev"
@@ -102,6 +102,8 @@ Usage:
   neochat [serve] [flags]                    start the server
   neochat reset-password <username> <pass>   set a user's password
   neochat make-admin <username>              grant admin rights
+  neochat tls status|self-signed|letsencrypt <domain> [email]
+                                             switch the certificate (restart to apply)
   neochat version
 
 Flags:
@@ -119,6 +121,9 @@ Flags:
 	case "serve":
 	case "reset-password", "make-admin":
 		runAdminCommand(cmd, o, fs.Args())
+		return
+	case "tls":
+		runTLSCommand(o, fs.Args())
 		return
 	default:
 		fs.Usage()
