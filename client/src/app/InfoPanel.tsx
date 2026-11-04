@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { del, get, mediaUrl, patch, post, upload } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
-import { Avatar, ColHead, Menu, Modal, pickFile, type MenuItem } from "../components/ui";
+import { Avatar, ColHead, Menu, Modal, type MenuItem } from "../components/ui";
+import { pickAvatar } from "./AvatarCropper";
 import { chatTitle, num, presenceText, ttlLabel } from "../format";
 import { errorText, useT } from "../i18n";
 import { useApp } from "../store";
@@ -495,7 +496,7 @@ function EditRoomModal({ chat, onClose }: { chat: Chat; onClose: () => void }) {
     }
   };
   const photo = async () => {
-    const f = await pickFile("image/*");
+    const f = await pickAvatar();
     if (f) setAvatar((await upload(f, { kind: "avatar" })).id);
   };
   return (

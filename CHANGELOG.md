@@ -2,6 +2,18 @@
 
 All notable changes to NeoChat are documented in this file.
 
+## [1.6.2] - 2026-11-04
+
+### Added
+
+- A crop screen for profile, group and channel photos: move with a finger, pinch or use the slider to zoom, turn by 90°; the result is an upright square photo that looks the same in every place
+
+### Fixed
+
+- Video and voice calls could end the moment they started: a call left over on the server (its hang-up lost with a dropped connection, or taken over by the same person's other device) made every new call fail without a word. Starting a call now ends any earlier one, only the device that was in a call can rejoin it, and every refused call says why
+- Calls no longer fail when the camera rejects the requested size or a voice-message microphone is still open: they retry with plain settings, then with sound only
+- Phone photos turned 90° counter-clockwise in avatars and previews (the EXIF orientation was ignored on the server); existing previews are repaired once on startup, and photo sizes are reported upright
+
 ## [1.6.1] - 2026-11-04
 
 ### Changed

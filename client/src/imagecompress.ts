@@ -12,7 +12,7 @@ const RECODE = /^image\/(jpeg|jpg|pjpeg|heic|heif|webp|avif|bmp)$/i;
 /** PNGs are mostly screenshots: kept sharp unless they are big. */
 const PNG_LIMIT = 1 << 20;
 
-async function decode(
+export async function decodeImage(
   file: Blob,
 ): Promise<{ img: CanvasImageSource; w: number; h: number; done(): void }> {
   if ("createImageBitmap" in window) {
@@ -44,9 +44,9 @@ export async function compressImage(file: File): Promise<File> {
   const type = file.type.toLowerCase();
   const png = type === "image/png";
   if (!RECODE.test(type) && !(png && file.size > PNG_LIMIT)) return file;
-  let src: Awaited<ReturnType<typeof decode>>;
+  let src: Awaited<ReturnType<typeof decodeImage>>;
   try {
-    src = await decode(file);
+    src = await decodeImage(file);
   } catch {
     return file;
   }

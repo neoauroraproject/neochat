@@ -11,7 +11,8 @@ import { RoundButton } from "./MobileHeader";
 import { QrModal } from "./QrModal";
 import { MyStorage } from "./MyStorage";
 import { confirmAction } from "../components/sheet";
-import { Avatar, Modal, Toggle, pickFile } from "../components/ui";
+import { Avatar, Modal, Toggle } from "../components/ui";
+import { pickAvatar } from "./AvatarCropper";
 import { listStamp, num } from "../format";
 import { errorText, useT } from "../i18n";
 import { disablePush, enablePush, getPref, setPref } from "../notify";
@@ -101,7 +102,7 @@ export function SettingsPane() {
   };
 
   const changePhoto = async () => {
-    const f = await pickFile("image/*");
+    const f = await pickAvatar();
     if (!f) return;
     try {
       const m = await upload(f, { kind: "avatar" });

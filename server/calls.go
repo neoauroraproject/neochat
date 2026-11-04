@@ -26,7 +26,10 @@ type Call struct {
 	AnsweredAt int64
 	caller     *Client
 	callee     *Client
-	timer      *time.Timer
+	// The devices in the call, so only they can take their place back after a dropped connection.
+	callerSession int64
+	calleeSession int64
+	timer         *time.Timer
 	// A side whose connection dropped keeps its place for callGrace; these end the call if it never returns.
 	callerAway *time.Timer
 	calleeAway *time.Timer
@@ -93,7 +96,7 @@ func (m *CallManager) invite(c *Client, to int64, video bool, ref string) {
 		fail("invalid")
 		return
 	}
-	if !s.limiter.allow("call:"+itoa(c.userID), 20, 10*time.Minute) {
+	if !s.limiter.allow("call:"+itoa(c.userID), 60, 10*time.Minute) {
 		fail("rate_limited")
 		return
 	}
@@ -107,10 +110,18 @@ func (m *CallManager) invite(c *Client, to int64, video bool, ref string) {
 	}
 
 	m.mu.Lock()
-	if m.byUser[c.userID] != nil {
+	// Starting a call means any earlier one of ours is over (its hang-up may have been lost with a
+	// dropped connection). Ending it here keeps a leftover from blocking every new call.
+	if old := m.byUser[c.userID]; old != nil {
 		m.mu.Unlock()
-		fail("busy_self")
-		return
+		m.finish(old.ID, c.userID, "ended")
+		m.mu.Lock()
+	}
+	// A call where both people have been gone is a leftover too, not a reason to say "busy".
+	if old := m.byUser[to]; old != nil && old.caller == nil && old.callee == nil && old.Status == "active" {
+		m.mu.Unlock()
+		m.finish(old.ID, 0, "ended")
+		m.mu.Lock()
 	}
 	// A phone with the app in the background has no live connection, but a push can still wake it:
 	// keep ringing while it opens. Only someone with neither is really unreachable.
@@ -125,7 +136,7 @@ func (m *CallManager) invite(c *Client, to int64, video bool, ref string) {
 		s.logCall(&Call{ID: randomHex(8), ChatID: chatID, CallerID: c.userID, CalleeID: to, Video: video, StartedAt: nowMs()}, "missed")
 		return
 	}
-	call := &Call{ID: randomHex(12), ChatID: chatID, CallerID: c.userID, CalleeID: to, Video: video, Status: "ringing", StartedAt: nowMs(), caller: c}
+	call := &Call{ID: randomHex(12), ChatID: chatID, CallerID: c.userID, CalleeID: to, Video: video, Status: "ringing", StartedAt: nowMs(), caller: c, callerSession: c.session}
 	m.calls[call.ID] = call
 	m.byUser[c.userID] = call
 	m.byUser[to] = call
@@ -177,6 +188,7 @@ func (m *CallManager) accept(c *Client, callID string) {
 	call.Status = "active"
 	call.AnsweredAt = nowMs()
 	call.callee = c
+	call.calleeSession = c.session
 	call.timer.Stop()
 	caller := call.caller
 	m.mu.Unlock()
@@ -285,13 +297,13 @@ func (m *CallManager) reattach(c *Client) {
 	var peer *Client
 	var peerID int64
 	switch {
-	case call.CallerID == c.userID && call.caller == nil:
+	case call.CallerID == c.userID && call.caller == nil && c.session == call.callerSession:
 		call.caller, peer, peerID = c, call.callee, call.CalleeID
 		if call.callerAway != nil {
 			call.callerAway.Stop()
 			call.callerAway = nil
 		}
-	case call.CalleeID == c.userID && call.Status == "active" && call.callee == nil:
+	case call.CalleeID == c.userID && call.Status == "active" && call.callee == nil && c.session == call.calleeSession:
 		call.callee, peer, peerID = c, call.caller, call.CallerID
 		if call.calleeAway != nil {
 			call.calleeAway.Stop()

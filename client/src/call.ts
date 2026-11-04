@@ -5,6 +5,7 @@ import { audio } from "./notify";
 import { useApp } from "./store";
 import type { User } from "./types";
 import { onEvent, wsSend } from "./ws";
+import { releaseMic } from "./voice";
 
 type Phase = "idle" | "outgoing" | "incoming" | "connecting" | "active" | "ended";
 
@@ -128,10 +129,27 @@ const camera = (facing: "user" | "environment"): MediaTrackConstraints => ({
 });
 
 async function getMedia(video: boolean, facing: "user" | "environment" = "user") {
-  return navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    video: video ? camera(facing) : false,
-  });
+  // A microphone still held for voice messages can block the call's own on some phones.
+  releaseMic();
+  const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio,
+      video: video ? camera(facing) : false,
+    });
+  } catch (e) {
+    const name = (e as DOMException)?.name;
+    if (name === "NotAllowedError" || name === "SecurityError") throw e;
+    // The camera is picky about the size or busy elsewhere: plain settings, then sound only.
+    if (video) {
+      try {
+        return await navigator.mediaDevices.getUserMedia({ audio, video: true });
+      } catch {
+        /* try without the camera */
+      }
+    }
+    return navigator.mediaDevices.getUserMedia({ audio });
+  }
 }
 
 /**
@@ -672,11 +690,20 @@ onEvent("call_created", (d) => {
 
 onEvent("call_failed", (d) => {
   if (d.ref !== ref) return;
-  const key = ({ busy: "call.busy", offline: "call.offline", disabled: "call.disabled" } as const)[
-    d.reason as "busy"
-  ];
-  if (key) useApp.getState().toast(t(key), "error");
-  cleanup(key ? t(key) : "");
+  // Every refusal says why; a call screen that just closes looks like a broken button.
+  const key =
+    (
+      {
+        busy: "call.busy",
+        offline: "call.offline",
+        disabled: "call.disabled",
+        rate_limited: "err.rate_limited",
+        invalid: "call.invalid",
+        busy_self: "call.busySelf",
+      } as const
+    )[d.reason as "busy"] || "call.failed";
+  useApp.getState().toast(t(key), "error");
+  cleanup(t(key));
 });
 
 onEvent("call_incoming", (d) => {

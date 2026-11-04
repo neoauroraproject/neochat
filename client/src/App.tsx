@@ -11,6 +11,7 @@ import { useApp } from "./store";
 import type { PublicConfig, User } from "./types";
 import { connect, disconnect } from "./ws";
 import "./call";
+import { CropperHost } from "./app/AvatarCropper";
 
 const AdminApp = lazy(() => import("./admin/AdminApp"));
 
@@ -146,6 +147,7 @@ export default function App() {
       {body}
       <Toasts />
       <ActionSheet />
+      <CropperHost />
     </>
   );
 }

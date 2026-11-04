@@ -134,7 +134,7 @@ func (s *Server) logoImage(id string) image.Image {
 	if err != nil {
 		return nil
 	}
-	return img
+	return orient(img, exifOrientation(f))
 }
 
 // fitIcon centers the logo on a square: it fills the square (cropping the longer side), or for a

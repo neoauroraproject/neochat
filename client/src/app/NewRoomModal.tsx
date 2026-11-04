@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { get, mediaUrl, post, upload } from "../api";
 import { Icon } from "../components/Icon";
-import { Avatar, Modal, SearchField, pickFile, useDebounced } from "../components/ui";
+import { Avatar, Modal, SearchField, useDebounced } from "../components/ui";
+import { pickAvatar } from "./AvatarCropper";
 import { errorText, useT } from "../i18n";
 import { useApp } from "../store";
 import type { Chat, User } from "../types";
@@ -27,7 +28,7 @@ export function NewRoomModal({
   const [busy, setBusy] = useState(false);
 
   const choosePhoto = async () => {
-    const f = await pickFile("image/*");
+    const f = await pickAvatar();
     if (!f) return;
     try {
       setAvatar((await upload(f, { kind: "avatar" })).id);

@@ -231,17 +231,23 @@ func (s *Server) makeThumb(path string) (int, int, bool) {
 	if err != nil {
 		return 0, 0, false
 	}
+	// The size as people see it: a phone photo stored sideways is reported upright.
+	o := exifOrientation(f)
+	shownW, shownH := cfg.Width, cfg.Height
+	if swapsSides(o) {
+		shownW, shownH = cfg.Height, cfg.Width
+	}
 	if cfg.Width*cfg.Height > 50_000_000 { // refuse decompression bombs
-		return cfg.Width, cfg.Height, false
+		return shownW, shownH, false
 	}
 	const maxSide = 480
 	if cfg.Width <= maxSide && cfg.Height <= maxSide {
-		return cfg.Width, cfg.Height, false
+		return shownW, shownH, false
 	}
 	f.Seek(0, io.SeekStart)
 	img, _, err := image.Decode(f)
 	if err != nil {
-		return cfg.Width, cfg.Height, false
+		return shownW, shownH, false
 	}
 	w, h := cfg.Width, cfg.Height
 	if w > h {
@@ -251,15 +257,17 @@ func (s *Server) makeThumb(path string) (int, int, bool) {
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, max(w, 1), max(h, 1)))
 	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, img.Bounds(), draw.Src, nil)
+	// Turning the small preview is cheap; the JPEG written below carries no EXIF, so it must be upright.
+	thumb := orient(dst, o)
 	out, err := os.Create(path + "_t")
 	if err != nil {
-		return cfg.Width, cfg.Height, false
+		return shownW, shownH, false
 	}
 	defer out.Close()
-	if err := jpeg.Encode(out, dst, &jpeg.Options{Quality: 72}); err != nil {
-		return cfg.Width, cfg.Height, false
+	if err := jpeg.Encode(out, thumb, &jpeg.Options{Quality: 72}); err != nil {
+		return shownW, shownH, false
 	}
-	return cfg.Width, cfg.Height, true
+	return shownW, shownH, true
 }
 
 func (s *Server) handleServeMedia(w http.ResponseWriter, r *http.Request) {

@@ -183,3 +183,61 @@ func TestCallEndsWhenPeerNeverReturns(t *testing.T) {
 		t.Fatalf("call_ended %v", got)
 	}
 }
+
+// A call left over on the server (its hang-up lost with a dropped connection) must not make every
+// new call fail: starting a call ends the caller's earlier one first.
+func TestNewCallEndsLeftoverCall(t *testing.T) {
+	s := newCallTestServer(t)
+	caller := &Client{hub: s.hub, userID: 1, session: 7, send: make(chan []byte, 32)}
+	callee := &Client{hub: s.hub, userID: 2, session: 8, send: make(chan []byte, 32)}
+	s.hub.add(caller)
+	s.hub.add(callee)
+	s.calls.invite(caller, 2, true, "first")
+	first := nextEvent(t, caller, "call_created")["callId"].(string)
+	nextEvent(t, callee, "call_incoming")
+
+	s.calls.invite(caller, 2, true, "second")
+	if got := nextEvent(t, caller, "call_ended"); got["callId"] != first {
+		t.Fatalf("leftover call not ended: %v", got)
+	}
+	created := nextEvent(t, caller, "call_created")
+	if created["ref"] != "second" || created["callId"] == first {
+		t.Fatalf("new call not started: %v", created)
+	}
+	if s.calls.activeCount() != 1 {
+		t.Fatalf("%d calls on the server, want 1", s.calls.activeCount())
+	}
+}
+
+// The same person's other device (a laptop left open) connecting during a dropped phone's grace
+// period must not take the phone's place in the call.
+func TestOtherDeviceDoesNotTakeOverCall(t *testing.T) {
+	old := callGrace
+	callGrace = 80 * time.Millisecond
+	defer func() { callGrace = old }()
+	s := newCallTestServer(t)
+	caller := &Client{hub: s.hub, userID: 1, session: 7, send: make(chan []byte, 32)}
+	callee := &Client{hub: s.hub, userID: 2, session: 8, send: make(chan []byte, 32)}
+	s.hub.add(caller)
+	s.hub.add(callee)
+	s.calls.invite(caller, 2, true, "r")
+	id := nextEvent(t, caller, "call_created")["callId"].(string)
+	nextEvent(t, callee, "call_incoming")
+	s.calls.accept(callee, id)
+	nextEvent(t, caller, "call_accepted")
+
+	s.calls.clientGone(callee)
+	s.hub.remove(callee)
+	laptop := &Client{hub: s.hub, userID: 2, session: 9, send: make(chan []byte, 32)}
+	s.hub.add(laptop)
+	s.calls.reattach(laptop)
+	select {
+	case b := <-laptop.send:
+		t.Fatalf("another device was put into the call: %s", b)
+	case <-time.After(30 * time.Millisecond):
+	}
+	// The phone never came back, so the call ends after the grace period.
+	if got := nextEvent(t, caller, "call_ended"); got["callId"] != id {
+		t.Fatalf("call_ended %v", got)
+	}
+}

@@ -21,9 +21,12 @@ type Client struct {
 	hub    *Hub
 	conn   *websocket.Conn
 	userID int64
-	send   chan []byte
-	mu     sync.Mutex
-	closed bool
+	// session is the sign-in this socket belongs to: one per device, so a call is only rejoined by
+	// the phone that was in it, never by the same person's laptop.
+	session int64
+	send    chan []byte
+	mu      sync.Mutex
+	closed  bool
 }
 
 type Hub struct {
@@ -197,13 +200,13 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		Token string `json:"token"`
 	}
 	json.Unmarshal(env.D, &auth)
-	u, _, err := s.authenticate(auth.Token)
+	u, sid, err := s.authenticate(auth.Token)
 	if err != nil {
 		conn.WriteJSON(map[string]any{"t": "auth_error", "d": map[string]string{"message": err.Error()}})
 		conn.Close()
 		return
 	}
-	c := &Client{hub: s.hub, conn: conn, userID: u.ID, send: make(chan []byte, 256)}
+	c := &Client{hub: s.hub, conn: conn, userID: u.ID, session: sid, send: make(chan []byte, 256)}
 	first := s.hub.add(c)
 	c.push(encodeEvent("ready", map[string]any{"user": s.public(u, u.ID), "config": s.publicConfig()}))
 	if first {

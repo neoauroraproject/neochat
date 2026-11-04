@@ -24,7 +24,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var version = "1.6.1"
+var version = "1.6.2"
 
 // defaultAdFeed is the NeoAurora license worker that serves network ads (override with -ad-feed).
 var defaultAdFeed = "https://license.hossein-m466.workers.dev"
