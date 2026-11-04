@@ -3,7 +3,8 @@
 # Requires Node 20+ and Go 1.24+ on the build machine only — the output binary needs nothing.
 set -eu
 cd "$(dirname "$0")/.."
-VERSION="${VERSION:-1.0.0}"
+# Without VERSION the binary reports the version written in server/main.go, so `neochat update` compares correctly.
+VERSION="${VERSION:-$(sed -n 's/^var version = "\(.*\)"/\1/p' server/main.go)}"
 
 echo "==> building web client"
 (cd client && npm ci --no-audit --no-fund && npm run build)

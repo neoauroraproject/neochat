@@ -135,8 +135,9 @@ async function budget() {
   if (maxBytes) return maxBytes;
   try {
     const est = await navigator.storage.estimate();
-    // Up to a third of what the browser grants, between 200 MB and 4 GB.
-    return Math.min(4 << 30, Math.max(200 << 20, (est.quota || 0) / 3));
+    // Up to a third of what the browser grants, between 200 MB and 4 GB. (Not `4 << 30`: JavaScript
+    // shifts in 32 bits, so that is 0 and the cache would throw away every file.)
+    return Math.min(4 * 1024 ** 3, Math.max(200 * 1024 ** 2, (est.quota || 0) / 3));
   } catch {
     return 500 << 20;
   }

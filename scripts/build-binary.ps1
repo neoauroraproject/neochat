@@ -2,7 +2,10 @@
 # Requires Node 20+ and Go 1.24+ on the build machine only — the output binary needs nothing.
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
-$version = if ($env:VERSION) { $env:VERSION } else { '1.0.0' }
+# Without VERSION the binary reports the version written in server/main.go, so `neochat update` compares correctly.
+$version = if ($env:VERSION) { $env:VERSION } else {
+  (Select-String -Path server/main.go -Pattern '^var version = "(.+)"').Matches[0].Groups[1].Value
+}
 
 Write-Host '==> building web client'
 Push-Location client

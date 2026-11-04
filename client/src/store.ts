@@ -663,12 +663,16 @@ export const useApp = create<AppState>((set, getState) => {
       }
       const mine = m.senderId === s.me?.id;
       const viewing = s.activeChatId === m.chatId && document.visibilityState === "visible";
+      // The chat list from the server (or an earlier delivery of this event) may already include this
+      // message: after a reconnect the list is reloaded and then sync replays the missed messages, so
+      // counting them again would double the unread badge.
+      const known = (c.lastMessage?.id ?? 0) >= m.id;
       patchChat(m.chatId, (c) => ({
-        lastMessage: m,
-        lastMessageAt: m.createdAt,
-        unread: mine || viewing ? c.unread : c.unread + 1,
+        lastMessage: known && c.lastMessage ? c.lastMessage : m,
+        lastMessageAt: known ? c.lastMessageAt : m.createdAt,
+        unread: mine || viewing || known ? c.unread : c.unread + 1,
         lastReadId: mine ? m.id : c.lastReadId,
-        archived: m.kind !== "system" && !c.muted ? false : c.archived,
+        archived: !known && m.kind !== "system" && !c.muted ? false : c.archived,
       }));
       // typing ends when the message arrives
       if (s.typing[m.chatId]?.[m.senderId]) {
