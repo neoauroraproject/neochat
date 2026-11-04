@@ -10,7 +10,8 @@ import { useT } from "../i18n";
 import { useApp } from "../store";
 import type { Ad, Chat, Message } from "../types";
 import { Composer } from "./Composer";
-import { useMobile, useTick } from "./hooks";
+import { ConnectingLabel } from "./ChatList";
+import { useConnState, useMobile, useTick } from "./hooks";
 import { askDeleteMessage } from "./chatActions";
 import { goBack } from "./nav";
 import { useStaged } from "./MediaPreview";
@@ -41,6 +42,7 @@ export function Conversation({
   const ads = useApp((s) => s.ads);
   const config = useApp((s) => s.config);
   const isMobile = useMobile();
+  const conn = useConnState();
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const loadingOlder = useRef(false);
@@ -365,6 +367,7 @@ export function Conversation({
   }
 
   const call = (video: boolean) => chat.peer && useCall.getState().start(chat.peer, video);
+  const canCall = chat.type === "direct" && !chat.saved && !!config?.callsEnabled;
   const openInfo = () => useApp.setState((s) => ({ infoOpen: !s.infoOpen }));
   const admin = chat.role === "owner" || chat.role === "admin";
   const hasMembers = chat.type === "group" || (chat.type === "channel" && admin);
@@ -394,14 +397,32 @@ export function Conversation({
       }}
     >
       {isMobile ? (
-        <header className="conv-head m-conv-head">
+        <header className={`conv-head m-conv-head${canCall ? " has-calls" : ""}`}>
           <button className="m-back" onClick={goBack} aria-label={t("common.back")}>
             <Icon name="back" size={21} className="flip-rtl" stroke={1.8} />
           </button>
           <button className="who" onClick={openInfo}>
             <div className="title">{title}</div>
-            {status && <div className={`status${statusOn ? " on" : ""}`}>{status}</div>}
+            {conn !== "ok" ? (
+              <div className="status">
+                <ConnectingLabel state={conn} />
+              </div>
+            ) : (
+              status && <div className={`status${statusOn ? " on" : ""}`}>{status}</div>
+            )}
           </button>
+          {canCall && (
+            <div className="m-call-btns">
+              {config?.videoCallsEnabled && (
+                <button className="m-call" onClick={() => call(true)} aria-label={t("call.video")}>
+                  <Icon name="video" size={21} />
+                </button>
+              )}
+              <button className="m-call" onClick={() => call(false)} aria-label={t("call.voice")}>
+                <Icon name="phone" size={20} />
+              </button>
+            </div>
+          )}
           <button className="m-head-avatar" onClick={openInfo} aria-label={t("chat.info")}>
             <Avatar
               id={chat.saved ? -1 : (chat.peer?.id ?? chat.id)}
@@ -439,15 +460,25 @@ export function Conversation({
               </button>
             </div>
           )}
-          {chat.type === "direct" && !chat.saved && config?.callsEnabled && (
+          {canCall && (
             <div className="head-actions">
-              {config.videoCallsEnabled && (
-                <button className="sq-btn" onClick={() => call(true)} aria-label={t("call.video")}>
-                  <Icon name="video" size={18} />
+              {config?.videoCallsEnabled && (
+                <button
+                  className="sq-btn call-btn"
+                  onClick={() => call(true)}
+                  aria-label={t("call.video")}
+                  title={t("call.video")}
+                >
+                  <Icon name="video" size={19} />
                 </button>
               )}
-              <button className="sq-btn" onClick={() => call(false)} aria-label={t("call.voice")}>
-                <Icon name="phone" size={17} />
+              <button
+                className="sq-btn call-btn"
+                onClick={() => call(false)}
+                aria-label={t("call.voice")}
+                title={t("call.voice")}
+              >
+                <Icon name="phone" size={18} />
               </button>
             </div>
           )}

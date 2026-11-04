@@ -46,6 +46,7 @@ func (s *Server) staticHandler() http.Handler {
 		st := s.cfg()
 		page := bytes.ReplaceAll(index, []byte("%APP_NAME%"), []byte(html.EscapeString(st.AppName)))
 		page = bytes.ReplaceAll(page, []byte("%ACCENT%"), []byte(st.AccentColor))
+		page = bytes.ReplaceAll(page, []byte("__LOGO__"), []byte(st.LogoMedia))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(page)
@@ -55,14 +56,13 @@ func (s *Server) staticHandler() http.Handler {
 // handleManifest makes the web app installable on phones with the admin's branding.
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	st := s.cfg()
-	icon := "/icon.svg"
-	iconType := "image/svg+xml"
-	if st.LogoMedia != "" {
-		icon = "/media/" + st.LogoMedia
-		iconType = ""
-		if m, err := s.mediaByID(st.LogoMedia); err == nil {
-			iconType = m.Mime
-		}
+	// PNG sizes made from the admin's logo (see appicon.go); the version makes phones refetch
+	// the icon when the logo changes.
+	v := "?v=" + st.LogoMedia
+	icons := []map[string]string{
+		{"src": "/app-icon/192.png" + v, "sizes": "192x192", "type": "image/png", "purpose": "any"},
+		{"src": "/app-icon/512.png" + v, "sizes": "512x512", "type": "image/png", "purpose": "any"},
+		{"src": "/app-icon/maskable.png" + v, "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
 	}
 	dir := "rtl"
 	if st.DefaultLang == "en" {
@@ -79,9 +79,7 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 		"theme_color":      "#16110e",
 		"lang":             st.DefaultLang,
 		"dir":              dir,
-		"icons": []map[string]string{
-			{"src": icon, "sizes": "any", "type": iconType, "purpose": "any"},
-		},
+		"icons":            icons,
 	}
 	w.Header().Set("Content-Type", "application/manifest+json")
 	w.Header().Set("Cache-Control", "no-cache")

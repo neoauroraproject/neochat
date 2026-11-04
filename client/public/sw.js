@@ -291,7 +291,7 @@ self.addEventListener("push", (e) => {
         body: d.body || "",
         tag: d.tag,
         renotify: !!d.tag,
-        icon: "/icon.svg",
+        icon: "/app-icon/192.png",
         data: { chatId: d.chatId },
         // An incoming call stays on screen and buzzes like a ringtone until it is handled.
         requireInteraction: !!d.ring,

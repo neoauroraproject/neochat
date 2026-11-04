@@ -70,7 +70,7 @@ export function notifyMessage(m: Message) {
     const n = new Notification(title, {
       body: preview(m, s.lang, s.me?.id),
       tag: `chat-${m.chatId}`,
-      icon: "/icon.svg",
+      icon: "/app-icon/192.png",
     });
     n.onclick = () => {
       window.focus();

@@ -1520,3 +1520,348 @@
 :root[data-theme="dark"] .phone .card-group {
   box-shadow: none;
 }
+
+/* =====================================================================
+   Round three: the brand title with a quiet "Connecting" state, the
+   unread count on the name's line, hairline row dividers, clear call
+   buttons, a smaller tab bar, hold-to-record voice and settings pages.
+   ===================================================================== */
+
+/* ---------- "Connecting" with three dots that appear one by one ---------- */
+.conn-label {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 0.6em;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--m-sub, var(--label-2));
+  white-space: nowrap;
+}
+.conn-dots {
+  display: inline-flex;
+  gap: 0.2em;
+  margin-inline-start: 0.3em;
+}
+.conn-dots i {
+  width: 0.22em;
+  height: 0.22em;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  animation: conn-dot 1.5s infinite;
+}
+.conn-dots i:nth-child(2) {
+  animation-delay: 0.25s;
+}
+.conn-dots i:nth-child(3) {
+  animation-delay: 0.5s;
+}
+@keyframes conn-dot {
+  0%,
+  12% {
+    opacity: 0;
+    transform: translateY(0.12em);
+  }
+  28%,
+  72% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conn-dots i {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+.status .conn-label,
+.col-head .conn-label {
+  font-size: inherit;
+}
+
+/* ---------- chat rows: count beside the name, hairline dividers ---------- */
+.phone .line1 {
+  align-items: center;
+}
+.phone .line1 .trail {
+  padding-top: 0;
+}
+.phone .line1 .trail.ticks {
+  margin-inline-start: auto;
+  padding-inline-start: 8px;
+}
+.phone .line1 .trail.ticks + .time {
+  margin-inline-start: 0;
+  padding-inline-start: 4px;
+}
+.phone .line1 .time + .trail {
+  margin-inline-start: 8px;
+}
+.phone .line1 .trail .badge {
+  min-width: 21px;
+  height: 21px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 21px;
+}
+.phone .chat-cell::after {
+  height: 1px;
+  background: color-mix(in srgb, var(--m-ink) 12%, transparent);
+  transform: scaleY(0.5);
+  transform-origin: bottom;
+}
+@media (max-resolution: 1.5dppx) {
+  .phone .chat-cell::after {
+    transform: none;
+    background: color-mix(in srgb, var(--m-ink) 8%, transparent);
+  }
+}
+
+/* ---------- call buttons in the chat header ---------- */
+.phone .m-conv-head.has-calls {
+  grid-template-columns: 44px minmax(0, 1fr) auto 46px;
+}
+.phone .m-conv-head.has-calls .who {
+  align-items: flex-start;
+  padding-inline-start: 4px;
+}
+.m-call-btns {
+  display: flex;
+  gap: 8px;
+}
+.m-call {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  transition: transform 140ms var(--ease-out);
+}
+.m-call:active {
+  transform: scale(0.9);
+}
+.sq-btn.call-btn {
+  width: 40px;
+  height: 40px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+@media (hover: hover) and (pointer: fine) {
+  .sq-btn.call-btn:hover {
+    color: #fff;
+    background: var(--accent);
+  }
+}
+
+/* ---------- smaller floating tab bar, same distance from the bottom ---------- */
+.phone .capsule {
+  left: 22px;
+  right: 22px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  height: 62px;
+  padding: 6px;
+  border-radius: 31px;
+}
+.phone .capsule button {
+  min-width: 48px;
+  height: 50px;
+  border-radius: 25px;
+  gap: 7px;
+}
+.phone .capsule button[aria-current="true"] {
+  padding: 0 17px;
+}
+.phone .capsule .tab-label {
+  font-size: 15px;
+}
+.phone .capsule .lens {
+  top: 6px;
+  height: 50px;
+  border-radius: 25px;
+}
+.phone .capsule .badge {
+  top: 4px;
+  min-width: 19px;
+  height: 19px;
+  font-size: 11px;
+}
+.phone .capsule button[aria-current="true"] .badge {
+  inset-inline-start: 28px;
+}
+.phone .tab-screen .screen-scroll {
+  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---------- hold to record ---------- */
+.mic-btn {
+  position: relative;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.composer .field-pill {
+  position: relative;
+}
+.rec-hold {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  border-radius: inherit;
+  background: var(--m-card, var(--surface));
+  color: var(--m-ink, var(--label));
+  font-size: 15px;
+  pointer-events: none;
+}
+.rec-hold .dot {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: rec-blink 1s ease-in-out infinite;
+}
+@keyframes rec-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.rec-time {
+  min-width: 3.4em;
+  font-variant-numeric: tabular-nums;
+}
+.rec-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+  margin-inline-end: 52px;
+  font-size: 14px;
+  color: var(--m-sub, var(--label-2));
+}
+.composer.holding .mic-btn {
+  z-index: 3;
+  color: #fff;
+  background: var(--danger);
+  border-radius: 50%;
+  transform: scale(1.3);
+  transition: transform 160ms var(--ease-out);
+}
+.rec-lock {
+  position: absolute;
+  bottom: calc(100% + 14px);
+  left: 50%;
+  margin-left: -15px;
+  width: 30px;
+  padding: 7px 0 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-radius: 15px;
+  color: var(--m-sub, var(--label-2));
+  background: var(--m-card, var(--surface));
+  box-shadow: 0 6px 18px rgba(20, 20, 26, 0.16);
+  pointer-events: none;
+}
+.rec-lock .up {
+  transform: rotate(180deg);
+}
+
+/* ---------- settings: a short list, each row opens a page ---------- */
+.settings-pane {
+  position: relative;
+}
+.item-value {
+  flex-shrink: 0;
+  font-size: 15px;
+  color: var(--m-faint, var(--label-3));
+}
+.pf-links + .pf-links {
+  margin-top: 18px;
+}
+/* the settings list stays one line per row, like the system Settings app */
+.pf-links .item .grow .muted {
+  display: none;
+}
+.pf-me .avatar-edit {
+  margin-top: 4px;
+}
+.pf-me h2 {
+  margin-top: 14px;
+  font-size: 26px;
+}
+.logout-item {
+  justify-content: center;
+  color: var(--danger) !important;
+  font-weight: 500;
+}
+.settings-foot {
+  margin: 22px 0 6px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--m-faint, var(--text-3));
+}
+.set-sub {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--m-bg, var(--surface));
+  animation: push-in 380ms var(--ease-drawer);
+}
+[dir="rtl"] .set-sub {
+  animation-name: push-in-rtl;
+}
+.set-sub-head {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 10px;
+  flex-shrink: 0;
+}
+.set-sub-head .m-back {
+  width: 44px;
+  height: 44px;
+}
+.set-sub-head h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--m-ink, var(--label));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.set-sub-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 6px 20px calc(110px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.set-sub-scroll > .card-group {
+  margin: 0;
+}
+.phone .set-sub .card-group > .item {
+  min-height: 56px;
+  font-size: 16px;
+}

@@ -2,6 +2,22 @@
 
 All notable changes to NeoChat are documented in this file.
 
+## [1.6.1] - 2026-11-04
+
+### Changed
+
+- Phone: the chat list title is the app's name; while the connection is down it reads "Connecting" (or "Waiting for network") with three small dots, in the list and in the chat header
+- Phone: the unread count sits on the name's line, hairline dividers separate chats, the chat header has clear voice and video call buttons, and the tab bar is smaller at the same distance from the bottom
+- Phone settings: a short list where each row opens its own page (notifications and sounds, privacy and security, devices, appearance, data and storage), with back by button or swipe
+- The logo from Branding is used everywhere: browser tab, home-screen icon (real PNG sizes for iPhone and Android, including a maskable one), install guide and notifications
+
+### Fixed
+
+- Voice messages: hold to record, let go to send, slide to cancel, slide up (or tap) to keep recording hands-free; the microphone is not requested again for every message; recordings are AAC (M4A) where the browser can make it, so iPhones play them; length and seeking work for recordings from Chrome and Firefox
+- The offline media cache limit evaluated to 0, so cached photos and videos were thrown away at once
+- Unread counts doubled after reconnecting
+- The build scripts stamp binaries with the version in the code instead of 1.0.0
+
 ## [1.6.0] - 2026-11-04
 
 The whole NeoChat roadmap (five releases) plus a native-style phone design.

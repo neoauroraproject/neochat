@@ -5,9 +5,10 @@ import { Icon } from "../components/Icon";
 import { Avatar, usePress } from "../components/ui";
 import { cancelDownload, saveFile, startDownload, useDownload } from "../downloads";
 import { callInfo, dateOf, duration, fileSize, systemText, timeOf } from "../format";
-import { useT } from "../i18n";
+import { translate, useT } from "../i18n";
 import { useApp } from "../store";
 import type { Chat, Message } from "../types";
+import { canPlay, releaseMic } from "../voice";
 import {
   ForwardLabel,
   LockedContent,
@@ -491,11 +492,37 @@ function VoicePlayer({ m, src }: { m: Message; src: string }) {
   useEffect(() => {
     const a = ref.current;
     if (!a) return;
-    const onTime = () => setPos(a.currentTime);
-    const onMeta = () => isFinite(a.duration) && setDur(a.duration);
+    // Recordings from Chrome and Firefox carry no length in the file, so the player reports
+    // Infinity until the end: no progress and no seeking. Jumping far ahead makes it read the
+    // whole (small) file and learn the real length; then it goes back to the start.
+    let probing = false;
+    const onTime = () => {
+      if (probing) {
+        if (isFinite(a.duration)) {
+          probing = false;
+          setDur(a.duration);
+          a.currentTime = 0;
+        }
+        return;
+      }
+      setPos(a.currentTime);
+    };
+    const onMeta = () => {
+      if (isFinite(a.duration) && a.duration > 0) {
+        setDur(a.duration);
+        if (probing) {
+          probing = false;
+          a.currentTime = 0;
+        }
+      } else if (!probing && a.duration === Infinity) {
+        probing = true;
+        a.currentTime = 1e7;
+      }
+    };
     const onEnd = () => {
       setPlaying(false);
       setPos(0);
+      if (isFinite(a.duration)) setDur(a.duration);
     };
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("loadedmetadata", onMeta);
@@ -511,12 +538,22 @@ function VoicePlayer({ m, src }: { m: Message; src: string }) {
   const toggle = () => {
     const a = ref.current;
     if (!a) return;
-    if (playing) a.pause();
-    else {
-      document.querySelectorAll("audio").forEach((x) => x !== a && x.pause());
-      a.play().catch(() => {});
+    if (!a.paused) {
+      a.pause();
+      return;
     }
-    setPlaying(!playing);
+    // While the microphone is open, iOS plays through the earpiece at a whisper.
+    releaseMic();
+    document.querySelectorAll("audio").forEach((x) => x !== a && x.pause());
+    if (a.ended || (dur && a.currentTime >= dur - 0.05)) a.currentTime = 0;
+    a.play().catch((e: DOMException) => {
+      if (e?.name === "AbortError") return;
+      const st = useApp.getState();
+      st.toast(
+        translate(st.lang, canPlay(m.media?.mime || "") ? "voice.playFailed" : "voice.unsupported"),
+        "error",
+      );
+    });
   };
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
     const a = ref.current;

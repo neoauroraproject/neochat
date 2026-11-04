@@ -16,6 +16,32 @@ export function useMedia(query: string) {
 
 export const useMobile = () => useMedia("(max-width: 760px)");
 
+/**
+ * The link to the server as the titles show it: "ok", or after a short grace (so a quick reconnect
+ * never flashes) "connecting" while the network is there and "offline" while it is not.
+ */
+export function useConnState(): "ok" | "connecting" | "offline" {
+  const connected = useApp((s) => s.connected);
+  const [late, setLate] = useState(false);
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    if (connected) return setLate(false);
+    const id = setTimeout(() => setLate(true), 1200);
+    return () => clearTimeout(id);
+  }, [connected]);
+  useEffect(() => {
+    const on = () => setOnline(navigator.onLine);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", on);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", on);
+    };
+  }, []);
+  if (connected || !late) return "ok";
+  return online ? "connecting" : "offline";
+}
+
 /** People the user talks to, online first — refreshed on presence changes. */
 export function useContacts() {
   const [list, setList] = useState<User[]>([]);

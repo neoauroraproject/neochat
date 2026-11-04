@@ -138,7 +138,7 @@ function TabCapsule({ hidden }: { hidden?: boolean }) {
           aria-label={t(n.key)}
           onClick={() => useApp.setState({ section: n.id })}
         >
-          <Icon name={n.icon === "video" ? "phone" : n.icon} size={24} stroke={1.7} />
+          <Icon name={n.icon === "video" ? "phone" : n.icon} size={22} stroke={1.7} />
           {section === n.id && <span className="tab-label">{t(n.key)}</span>}
           {n.id === "chats" && unread > 0 && <span className="badge">{num(unread, lang)}</span>}
         </button>
@@ -494,7 +494,8 @@ export function AppShell() {
           </div>
         )}
         <TabCapsule hidden={!!chat} />
-        <OfflineBanner />
+        {/* The chat list and chat titles say "Connecting" themselves. */}
+        {section !== "chats" && !chat && <OfflineBanner />}
         <UpdateBanner />
         <DeepLinks />
         <InstallGuide />

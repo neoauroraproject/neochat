@@ -6,6 +6,7 @@ import { AppLockSettings } from "./AppLockSettings";
 import { DataStorage } from "./DataStorage";
 import { ChatAppearance } from "./ChatAppearance";
 import { useMobile } from "./hooks";
+import { goBack, useLayer } from "./nav";
 import { RoundButton } from "./MobileHeader";
 import { QrModal } from "./QrModal";
 import { MyStorage } from "./MyStorage";
@@ -72,8 +73,6 @@ export function SettingsPane() {
   const [lookOpen, setLookOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const isMobile = useMobile();
-  const jump = (id: string) =>
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   const [notify, setNotify] = useState(
     getPref("notify") &&
       typeof Notification !== "undefined" &&
@@ -128,11 +127,338 @@ export function SettingsPane() {
     profile.username !== me.username ||
     profile.bio !== me.bio;
 
+  type Sub = "privacy" | "devices" | "notify" | "look" | "data";
+  const [sub, setSub] = useState<Sub | null>(null);
+  // A settings page is one layer: back (button, swipe, Android key) returns to the list.
+  useLayer(isMobile && !!sub, () => setSub(null));
+
+  const profileForm = (
+    <>
+      <div className="section-label">{t("settings.profile")}</div>
+      <div className="card-group form-group">
+        <div className="field">
+          <label>{t("auth.displayName")}</label>
+          <input
+            className="input"
+            value={profile.displayName}
+            onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
+            maxLength={64}
+          />
+        </div>
+        <div className="field">
+          <label>{t("auth.username")}</label>
+          <div className="input-prefix">
+            <span>@</span>
+            <input
+              className="input ltr"
+              dir="ltr"
+              value={profile.username}
+              onChange={(e) =>
+                setProfile({
+                  ...profile,
+                  username: e.target.value.replace(/[^a-zA-Z0-9_]/g, ""),
+                })
+              }
+              maxLength={32}
+              autoCapitalize="none"
+            />
+          </div>
+          <span className="hint">{t("auth.usernameHint")}</span>
+        </div>
+        <div className="field">
+          <label>{t("settings.bio")}</label>
+          <textarea
+            className="textarea"
+            value={profile.bio}
+            onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+            maxLength={300}
+            rows={2}
+          />
+        </div>
+        {(dirty || saved) && (
+          <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: 14 }}>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!dirty}
+              onClick={() => save(profile)}
+            >
+              {saved ? <Icon name="check" size={16} /> : null}
+              {saved ? t("common.saved") : t("common.save")}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  // Each part is a page of its own on phones and a section of one long page on desktop.
+  const privacy = (label: boolean) => (
+    <>
+      {label && <div className="section-label">{t("settings.privacy")}</div>}
+      <div className="card-group">
+        <div className="item">
+          <span className="item-icon" style={{ background: "#5e5ce6" }}>
+            <Icon name="clock" size={18} />
+          </span>
+          <div className="grow">
+            <div>{t("settings.hideLastSeen")}</div>
+            <div className="muted">{t("settings.hideLastSeenHint")}</div>
+          </div>
+          <Toggle
+            checked={!!me.hideLastSeen}
+            onChange={(v) => save({ hideLastSeen: v })}
+            label={t("settings.hideLastSeen")}
+          />
+        </div>
+        <button className="item" onClick={() => setPwOpen(true)}>
+          <span className="item-icon" style={{ background: "#ff9f0a" }}>
+            <Icon name="lock" size={18} />
+          </span>
+          <div className="grow">{t("settings.password")}</div>
+          <Icon name="forward" size={18} className="flip-rtl chev" />
+        </button>
+      </div>
+      <AppLockSettings />
+    </>
+  );
+
+  const themeName = t(
+    theme === "dark"
+      ? "settings.themeDark"
+      : theme === "light"
+        ? "settings.themeLight"
+        : "settings.themeAuto",
+  );
+  const look = (label: boolean) => (
+    <>
+      {label && <div className="section-label">{t("settings.appearance")}</div>}
+      <div className="card-group">
+        <button className="item" onClick={() => setLookOpen(true)}>
+          <span className="item-icon" style={{ background: "#17a9c2" }}>
+            <Icon name="palette" size={18} />
+          </span>
+          <div className="grow">{t("look.title")}</div>
+          <Icon name="forward" size={18} className="flip-rtl chev" />
+        </button>
+        <div className="item">
+          <span className="item-icon" style={{ background: "#0a84ff" }}>
+            <Icon name="globe" size={18} />
+          </span>
+          <div className="grow">{t("settings.language")}</div>
+          <div className="segmented" style={{ width: 170 }}>
+            <button aria-pressed={lang === "fa"} onClick={() => useApp.getState().setLang("fa")}>
+              فارسی
+            </button>
+            <button aria-pressed={lang === "en"} onClick={() => useApp.getState().setLang("en")}>
+              English
+            </button>
+          </div>
+        </div>
+        <div className="item" style={{ flexWrap: "wrap" }}>
+          <span className="item-icon" style={{ background: "#636366" }}>
+            <Icon name="moon" size={18} />
+          </span>
+          <div className="grow">{t("settings.theme")}</div>
+          <div className="segmented" style={{ width: 230 }}>
+            {(["dark", "light", "auto"] as const).map((th) => (
+              <button
+                key={th}
+                aria-pressed={theme === th}
+                onClick={() => useApp.getState().setTheme(th)}
+              >
+                {t(
+                  th === "dark"
+                    ? "settings.themeDark"
+                    : th === "light"
+                      ? "settings.themeLight"
+                      : "settings.themeAuto",
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  const notifications = (label: boolean) => (
+    <>
+      {label && <div className="section-label">{t("settings.notifications")}</div>}
+      <div className="card-group">
+        <div className="item">
+          <span className="item-icon" style={{ background: "#ff375f" }}>
+            <Icon name="bell" size={18} />
+          </span>
+          <div className="grow">{t("settings.enableNotifications")}</div>
+          <Toggle checked={notify} onChange={enableNotify} />
+        </div>
+        <div className="item">
+          <span className="item-icon" style={{ background: "#30d158" }}>
+            <Icon name="speaker" size={18} />
+          </span>
+          <div className="grow">{t("settings.sound")}</div>
+          <Toggle
+            checked={sound}
+            onChange={(v) => {
+              setPref("sound", v);
+              setSound(v);
+            }}
+          />
+        </div>
+      </div>
+    </>
+  );
+
+  const devices = (label: boolean) => (
+    <>
+      {label && <div className="section-label">{t("settings.sessions")}</div>}
+      <div className="card-group">
+        {sessions.map((s) => (
+          <div key={s.id} className="item">
+            <span className="item-icon" style={{ background: s.current ? "#30d158" : "#48484a" }}>
+              <Icon name="server" size={18} />
+            </span>
+            <div className="grow">
+              <div>
+                {deviceName(s.userAgent)}{" "}
+                {s.current && <span className="chip success">{t("settings.thisDevice")}</span>}
+              </div>
+              <div className="muted">
+                <span className="ltr">{s.ip}</span> · {listStamp(s.lastUsed, lang)}
+              </div>
+            </div>
+            {!s.current && (
+              <button
+                className="btn btn-sm"
+                onClick={() => del(`/api/me/sessions/${s.id}`).then(loadSessions)}
+              >
+                {t("settings.terminate")}
+              </button>
+            )}
+          </div>
+        ))}
+        {sessions.length > 1 && (
+          <button
+            className="item"
+            style={{ color: "var(--danger)" }}
+            onClick={() => del("/api/me/sessions/others").then(loadSessions)}
+          >
+            <Icon name="x" size={18} />
+            {t("settings.terminateOthers")}
+          </button>
+        )}
+      </div>
+    </>
+  );
+
+  const installRow = !isStandalone() && (
+    <button className="item" onClick={() => (pwa.deferred ? pwa.install() : pwa.openGuide())}>
+      <span className="item-icon" style={{ background: "#0a84ff" }}>
+        <Icon name="download" size={18} />
+      </span>
+      <div className="grow">
+        <div>{t("settings.install")}</div>
+        <div className="muted">{t("settings.installHint")}</div>
+      </div>
+    </button>
+  );
+
+  const data = (label: boolean) => (
+    <>
+      <MyStorage />
+      <DataStorage />
+      {label && <div className="section-label">{t("settings.storage")}</div>}
+      <div className="card-group">
+        <div className="item">
+          <span className="item-icon" style={{ background: "#64d2ff" }}>
+            <Icon name="database" size={18} />
+          </span>
+          <div className="grow muted">
+            {t("settings.cacheInfo", { n: num(config?.clientCacheMessages ?? 200, lang) })}
+          </div>
+        </div>
+        <button
+          className="item"
+          onClick={async () => {
+            await clearAllCaches();
+            useApp.getState().toast(t("settings.cacheCleared"));
+          }}
+        >
+          <span className="item-icon" style={{ background: "#8e8e93" }}>
+            <Icon name="trash" size={18} />
+          </span>
+          <div className="grow">{t("settings.clearCache")}</div>
+        </button>
+        {!isMobile && installRow}
+      </div>
+    </>
+  );
+
+  const adminRow = me.isAdmin && (
+    <a className="item" href="/admin" style={{ color: "var(--text)" }}>
+      <span className="item-icon" style={{ background: "var(--accent)" }}>
+        <Icon name="dashboard" size={18} />
+      </span>
+      <div className="grow">{t("nav.admin")}</div>
+      <Icon name="forward" size={18} className="flip-rtl chev" />
+    </a>
+  );
+  const logoutRow = (
+    <button
+      className="item logout-item"
+      onClick={() =>
+        confirmAction({
+          title: t("sheet.logoutTitle"),
+          message: t("sheet.logoutBody"),
+          label: t("settings.logout"),
+          run: () => useApp.getState().logout(),
+        })
+      }
+    >
+      <Icon name="logout" size={18} />
+      {t("settings.logout")}
+    </button>
+  );
+  const footer = (
+    <p className="settings-foot">
+      {config?.appName} · {t("settings.version", { v: config?.version || "" })}
+      <br />
+      {t("common.copyright")} · {t("common.poweredBy")}
+    </p>
+  );
+
+  /** A row of the phone's settings list that opens a page. */
+  const navRow = (
+    icon: string,
+    color: string,
+    label: string,
+    onClick: () => void,
+    value?: string,
+    filled?: boolean,
+  ) => (
+    <button className="item" onClick={onClick}>
+      <span className="pf-ic" style={{ background: color }}>
+        <Icon name={icon} size={17} filled={filled} />
+      </span>
+      <div className="grow">{label}</div>
+      {value && <span className="item-value">{value}</span>}
+      <Icon name="forward" size={16} className="flip-rtl chev" />
+    </button>
+  );
+
+  const subPages: Record<Sub, { title: string; body: React.ReactNode }> = {
+    privacy: { title: t("settings.privacy"), body: privacy(false) },
+    devices: { title: t("settings.devices"), body: devices(false) },
+    notify: { title: t("settings.notifySounds"), body: notifications(false) },
+    look: { title: t("settings.appearance"), body: look(false) },
+    data: { title: t("settings.storage"), body: data(false) },
+  };
+
   return (
     <div className="settings-pane">
       <LargeTitleScreen title={t("settings.title")} grouped bare={isMobile}>
         <div className="settings-inner">
-          {isMobile && (
+          {isMobile ? (
             <div className="pf-me">
               <div className="pf-me-top">
                 <RoundButton icon="grid-qr" label={t("qr.mine")} onClick={() => setQrOpen(true)} />
@@ -144,7 +470,7 @@ export function SettingsPane() {
                 </button>
               </div>
               <div className="avatar-edit">
-                <Avatar id={me.id} name={me.displayName} media={me.avatar} size={128} />
+                <Avatar id={me.id} name={me.displayName} media={me.avatar} size={112} />
                 <button
                   className="icon-btn accent"
                   onClick={changePhoto}
@@ -158,46 +484,8 @@ export function SettingsPane() {
                 <span className="ltr">@{me.username}</span>
                 {me.bio && <span className="pf-me-bio">{me.bio}</span>}
               </div>
-              <div className="card-group pf-links">
-                <button className="item" onClick={() => useApp.getState().openDirect(me.id)}>
-                  <span className="pf-ic" style={{ background: "#3478f6" }}>
-                    <Icon name="bookmark" size={17} filled />
-                  </span>
-                  <div className="grow">{t("list.saved")}</div>
-                  <Icon name="forward" size={16} className="flip-rtl chev" />
-                </button>
-                <button className="item" onClick={() => useApp.setState({ section: "calls" })}>
-                  <span className="pf-ic" style={{ background: "#2fb85a" }}>
-                    <Icon name="phone" size={17} filled />
-                  </span>
-                  <div className="grow">{t("call.history")}</div>
-                  <Icon name="forward" size={16} className="flip-rtl chev" />
-                </button>
-                <button className="item" onClick={() => jump("set-sessions")}>
-                  <span className="pf-ic" style={{ background: "#f2a33a" }}>
-                    <Icon name="server" size={17} />
-                  </span>
-                  <div className="grow">{t("settings.sessions")}</div>
-                  <Icon name="forward" size={16} className="flip-rtl chev" />
-                </button>
-                <button className="item" onClick={() => setLookOpen(true)}>
-                  <span className="pf-ic" style={{ background: "#17a9c2" }}>
-                    <Icon name="palette" size={17} />
-                  </span>
-                  <div className="grow">{t("look.title")}</div>
-                  <Icon name="forward" size={16} className="flip-rtl chev" />
-                </button>
-                <button className="item" onClick={() => jump("set-storage")}>
-                  <span className="pf-ic" style={{ background: "#9b6bf2" }}>
-                    <Icon name="database" size={17} />
-                  </span>
-                  <div className="grow">{t("storage.title")}</div>
-                  <Icon name="forward" size={16} className="flip-rtl chev" />
-                </button>
-              </div>
             </div>
-          )}
-          {!isMobile && (
+          ) : (
             <div className="me-card">
               <div className="avatar-edit">
                 <Avatar id={me.id} name={me.displayName} media={me.avatar} size={96} />
@@ -220,285 +508,91 @@ export function SettingsPane() {
           {qrOpen && <QrModal onClose={() => setQrOpen(false)} />}
 
           {error && <div className="form-error">{error}</div>}
-          {(!isMobile || editingProfile) && (
+          {(!isMobile || editingProfile) && profileForm}
+
+          {isMobile ? (
             <>
-              <div className="section-label">{t("settings.profile")}</div>
-              <div className="card-group form-group">
-                <div className="field">
-                  <label>{t("auth.displayName")}</label>
-                  <input
-                    className="input"
-                    value={profile.displayName}
-                    onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
-                    maxLength={64}
-                  />
-                </div>
-                <div className="field">
-                  <label>{t("auth.username")}</label>
-                  <div className="input-prefix">
-                    <span>@</span>
-                    <input
-                      className="input ltr"
-                      dir="ltr"
-                      value={profile.username}
-                      onChange={(e) =>
-                        setProfile({
-                          ...profile,
-                          username: e.target.value.replace(/[^a-zA-Z0-9_]/g, ""),
-                        })
-                      }
-                      maxLength={32}
-                      autoCapitalize="none"
-                    />
-                  </div>
-                  <span className="hint">{t("auth.usernameHint")}</span>
-                </div>
-                <div className="field">
-                  <label>{t("settings.bio")}</label>
-                  <textarea
-                    className="textarea"
-                    value={profile.bio}
-                    onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                    maxLength={300}
-                    rows={2}
-                  />
-                </div>
-                {(dirty || saved) && (
-                  <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: 14 }}>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      disabled={!dirty}
-                      onClick={() => save(profile)}
-                    >
-                      {saved ? <Icon name="check" size={16} /> : null}
-                      {saved ? t("common.saved") : t("common.save")}
-                    </button>
-                  </div>
+              <div className="card-group pf-links">
+                {navRow(
+                  "bookmark",
+                  "#3478f6",
+                  t("list.saved"),
+                  () => useApp.getState().openDirect(me.id),
+                  undefined,
+                  true,
                 )}
+                {navRow(
+                  "phone",
+                  "#2fb85a",
+                  t("call.history"),
+                  () => useApp.setState({ section: "calls" }),
+                  undefined,
+                  true,
+                )}
+              </div>
+              <div className="card-group pf-links">
+                {navRow(
+                  "bell",
+                  "#ff375f",
+                  t("settings.notifySounds"),
+                  () => setSub("notify"),
+                  notify ? t("common.on") : t("common.off"),
+                )}
+                {navRow("lock", "#5e5ce6", t("settings.privacy"), () => setSub("privacy"))}
+                {navRow(
+                  "server",
+                  "#f2a33a",
+                  t("settings.devices"),
+                  () => setSub("devices"),
+                  sessions.length ? num(sessions.length, lang) : undefined,
+                )}
+                {navRow(
+                  "palette",
+                  "#17a9c2",
+                  t("settings.appearance"),
+                  () => setSub("look"),
+                  themeName,
+                )}
+                {navRow("database", "#9b6bf2", t("settings.storage"), () => setSub("data"))}
+              </div>
+              {(installRow || adminRow) && (
+                <div className="card-group pf-links">
+                  {installRow}
+                  {adminRow}
+                </div>
+              )}
+              <div className="card-group pf-links">{logoutRow}</div>
+            </>
+          ) : (
+            <>
+              {privacy(true)}
+              {look(true)}
+              {notifications(true)}
+              {devices(true)}
+              {data(true)}
+              <div className="card-group">
+                {adminRow}
+                {logoutRow}
               </div>
             </>
           )}
-
-          <div className="section-label">{t("settings.privacy")}</div>
-          <div className="card-group">
-            <div className="item">
-              <span className="item-icon" style={{ background: "#5e5ce6" }}>
-                <Icon name="clock" size={18} />
-              </span>
-              <div className="grow">
-                <div>{t("settings.hideLastSeen")}</div>
-                <div className="muted">{t("settings.hideLastSeenHint")}</div>
-              </div>
-              <Toggle
-                checked={!!me.hideLastSeen}
-                onChange={(v) => save({ hideLastSeen: v })}
-                label={t("settings.hideLastSeen")}
-              />
-            </div>
-            <button className="item" onClick={() => setPwOpen(true)}>
-              <span className="item-icon" style={{ background: "#ff9f0a" }}>
-                <Icon name="lock" size={18} />
-              </span>
-              <div className="grow">{t("settings.password")}</div>
-              <Icon name="forward" size={18} className="flip-rtl" />
-            </button>
-          </div>
-
-          <div className="section-label">{t("settings.appearance")}</div>
-          <div className="card-group">
-            <button className="item" onClick={() => setLookOpen(true)}>
-              <span className="item-icon" style={{ background: "#17a9c2" }}>
-                <Icon name="palette" size={18} />
-              </span>
-              <div className="grow">{t("look.title")}</div>
-              <Icon name="forward" size={18} className="flip-rtl" />
-            </button>
-            <div className="item">
-              <span className="item-icon" style={{ background: "#0a84ff" }}>
-                <Icon name="globe" size={18} />
-              </span>
-              <div className="grow">{t("settings.language")}</div>
-              <div className="segmented" style={{ width: 170 }}>
-                <button
-                  aria-pressed={lang === "fa"}
-                  onClick={() => useApp.getState().setLang("fa")}
-                >
-                  فارسی
-                </button>
-                <button
-                  aria-pressed={lang === "en"}
-                  onClick={() => useApp.getState().setLang("en")}
-                >
-                  English
-                </button>
-              </div>
-            </div>
-            <div className="item" style={{ flexWrap: "wrap" }}>
-              <span className="item-icon" style={{ background: "#636366" }}>
-                <Icon name="moon" size={18} />
-              </span>
-              <div className="grow">{t("settings.theme")}</div>
-              <div className="segmented" style={{ width: 230 }}>
-                {(["dark", "light", "auto"] as const).map((th) => (
-                  <button
-                    key={th}
-                    aria-pressed={theme === th}
-                    onClick={() => useApp.getState().setTheme(th)}
-                  >
-                    {t(
-                      th === "dark"
-                        ? "settings.themeDark"
-                        : th === "light"
-                          ? "settings.themeLight"
-                          : "settings.themeAuto",
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="section-label">{t("settings.notifications")}</div>
-          <div className="card-group">
-            <div className="item">
-              <span className="item-icon" style={{ background: "#ff375f" }}>
-                <Icon name="bell" size={18} />
-              </span>
-              <div className="grow">{t("settings.enableNotifications")}</div>
-              <Toggle checked={notify} onChange={enableNotify} />
-            </div>
-            <div className="item">
-              <span className="item-icon" style={{ background: "#30d158" }}>
-                <Icon name="speaker" size={18} />
-              </span>
-              <div className="grow">{t("settings.sound")}</div>
-              <Toggle
-                checked={sound}
-                onChange={(v) => {
-                  setPref("sound", v);
-                  setSound(v);
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="section-label" id="set-sessions">
-            {t("settings.sessions")}
-          </div>
-          <div className="card-group">
-            {sessions.map((s) => (
-              <div key={s.id} className="item">
-                <span
-                  className="item-icon"
-                  style={{ background: s.current ? "#30d158" : "#48484a" }}
-                >
-                  <Icon name="server" size={18} />
-                </span>
-                <div className="grow">
-                  <div>
-                    {deviceName(s.userAgent)}{" "}
-                    {s.current && <span className="chip success">{t("settings.thisDevice")}</span>}
-                  </div>
-                  <div className="muted">
-                    <span className="ltr">{s.ip}</span> · {listStamp(s.lastUsed, lang)}
-                  </div>
-                </div>
-                {!s.current && (
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => del(`/api/me/sessions/${s.id}`).then(loadSessions)}
-                  >
-                    {t("settings.terminate")}
-                  </button>
-                )}
-              </div>
-            ))}
-            {sessions.length > 1 && (
-              <button
-                className="item"
-                style={{ color: "var(--danger)" }}
-                onClick={() => del("/api/me/sessions/others").then(loadSessions)}
-              >
-                <Icon name="x" size={18} />
-                {t("settings.terminateOthers")}
-              </button>
-            )}
-          </div>
-
-          <AppLockSettings />
-          <div id="set-storage" />
-          <MyStorage />
-          <DataStorage />
-
-          <div className="section-label">{t("settings.storage")}</div>
-          <div className="card-group">
-            <div className="item">
-              <span className="item-icon" style={{ background: "#64d2ff" }}>
-                <Icon name="database" size={18} />
-              </span>
-              <div className="grow muted">
-                {t("settings.cacheInfo", { n: num(config?.clientCacheMessages ?? 200, lang) })}
-              </div>
-            </div>
-            <button
-              className="item"
-              onClick={async () => {
-                await clearAllCaches();
-                useApp.getState().toast(t("settings.cacheCleared"));
-              }}
-            >
-              <Icon name="trash" size={18} />
-              {t("settings.clearCache")}
-            </button>
-            {!isStandalone() && (
-              <button
-                className="item"
-                onClick={() => (pwa.deferred ? pwa.install() : pwa.openGuide())}
-              >
-                <Icon name="download" size={18} />
-                <div className="grow">
-                  <div>{t("settings.install")}</div>
-                  <div className="muted">{t("settings.installHint")}</div>
-                </div>
-              </button>
-            )}
-          </div>
-
-          <div className="card-group">
-            {me.isAdmin && (
-              <a className="item" href="/admin" style={{ color: "var(--text)" }}>
-                <span className="item-icon" style={{ background: "var(--accent)" }}>
-                  <Icon name="dashboard" size={18} />
-                </span>
-                <div className="grow">{t("nav.admin")}</div>
-                <Icon name="forward" size={18} className="flip-rtl" />
-              </a>
-            )}
-            <button
-              className="item"
-              style={{ color: "var(--danger)" }}
-              onClick={() =>
-                confirmAction({
-                  title: t("sheet.logoutTitle"),
-                  message: t("sheet.logoutBody"),
-                  label: t("settings.logout"),
-                  run: () => useApp.getState().logout(),
-                })
-              }
-            >
-              <Icon name="logout" size={18} />
-              {t("settings.logout")}
-            </button>
-          </div>
-          <p style={{ textAlign: "center", color: "var(--text-3)", fontSize: 12.5 }}>
-            {config?.appName} · {t("settings.version", { v: config?.version || "" })}
-            <br />
-            {t("common.copyright")} · {t("common.poweredBy")}
-          </p>
+          {footer}
         </div>
         {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
         {lookOpen && <ChatAppearance onClose={() => setLookOpen(false)} />}
       </LargeTitleScreen>
+      {isMobile && sub && (
+        <div className="set-sub" key={sub}>
+          <header className="set-sub-head">
+            <button className="m-back" onClick={goBack} aria-label={t("common.back")}>
+              <Icon name="back" size={21} className="flip-rtl" stroke={1.8} />
+            </button>
+            <h2>{subPages[sub].title}</h2>
+            <span className="set-sub-side" />
+          </header>
+          <div className="set-sub-scroll">{subPages[sub].body}</div>
+        </div>
+      )}
     </div>
   );
 }

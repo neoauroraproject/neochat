@@ -17,7 +17,7 @@ import { useT } from "../i18n";
 import { sortedChats, useApp, type Filter } from "../store";
 import { searchMessages } from "../localdb";
 import type { Ad, Chat, Message, RoomPreview, User } from "../types";
-import { useContacts, useMobile, useTick } from "./hooks";
+import { useConnState, useContacts, useMobile, useTick } from "./hooks";
 import { askRemoveChat } from "./chatActions";
 import { useNewMenu } from "./NewMenu";
 import { MobileHeader, RoundButton } from "./MobileHeader";
@@ -108,7 +108,16 @@ export function ChatList() {
       )
     : [];
 
-  const title = filter === "archive" ? t("nav.archive") : t("nav.chats");
+  const appName = useApp((s) => s.config?.appName);
+  const conn = useConnState();
+  const title =
+    filter === "archive" ? (
+      t("nav.archive")
+    ) : conn !== "ok" ? (
+      <ConnectingLabel state={conn} />
+    ) : (
+      appName || t("nav.chats")
+    );
 
   const rows = (
     <>
@@ -223,6 +232,21 @@ export function ChatList() {
       </div>
       {newMenu.element}
     </div>
+  );
+}
+
+/** "Connecting" (or "Waiting for network") with three small dots that appear one by one. */
+export function ConnectingLabel({ state }: { state: "connecting" | "offline" }) {
+  const t = useT();
+  return (
+    <span className="conn-label" role="status">
+      {t(state === "offline" ? "list.waitingNetwork" : "list.connecting")}
+      <span className="conn-dots" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+    </span>
   );
 }
 
@@ -625,6 +649,21 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
   };
 
   const read = !!(mine && lm && c.othersReadId >= lm.id);
+  const badge =
+    c.unread > 0 ? (
+      <span className={`badge${c.muted ? " muted" : ""}`}>{num(c.unread, lang)}</span>
+    ) : null;
+  const tick = badge ? null : read && c.peer && !c.saved ? (
+    <Icon name="checks" size={15} className="tick read" />
+  ) : mine ? (
+    <Icon name={read ? "checks" : "check"} size={15} className="tick" />
+  ) : null;
+  // Phones put the unread count on the name's line (after the time) and the ticks before the time.
+  const trail = isMobile ? (
+    tick && <span className="trail ticks">{tick}</span>
+  ) : (
+    <span className="trail">{badge || tick}</span>
+  );
   return (
     <div
       className={`cell-wrap${compact ? " compact" : ""}${swipe.open ? " swiping" : ""}`}
@@ -669,19 +708,13 @@ export function ChatRow({ chat: c, compact }: { chat: Chat; compact?: boolean })
             <span className="title">{title}</span>
             {c.muted && <Icon name="bell-off" size={13} className="kind" />}
             {c.pinned && <Icon name="pin" size={13} className="kind" />}
+            {isMobile && trail}
             <span className="time">{listStamp(c.lastMessageAt, lang)}</span>
+            {isMobile && badge && <span className="trail">{badge}</span>}
           </span>
           <span className="line2">
             <span className="sub">{sub}</span>
-            <span className="trail">
-              {c.unread > 0 ? (
-                <span className={`badge${c.muted ? " muted" : ""}`}>{num(c.unread, lang)}</span>
-              ) : read && c.peer && !c.saved ? (
-                <Icon name="checks" size={15} className="tick read" />
-              ) : mine ? (
-                <Icon name={read ? "checks" : "check"} size={15} className="tick" />
-              ) : null}
-            </span>
+            {!isMobile && trail}
           </span>
         </span>
       </button>

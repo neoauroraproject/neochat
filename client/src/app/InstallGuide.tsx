@@ -114,7 +114,7 @@ export function InstallGuide() {
     <Modal title={t("install.title", { app })} onClose={closeGuide} footer={footer}>
       <div className="install-guide">
         <span className="install-icon">
-          <img src="/icon.svg" alt="" width={56} height={56} />
+          <img src="/app-icon/any" alt="" width={56} height={56} />
         </span>
         <p className="install-text">{t("install.intro", { app })}</p>
         {body}
