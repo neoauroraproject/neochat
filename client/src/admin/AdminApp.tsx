@@ -36,7 +36,7 @@ export default function AdminApp() {
   }, []);
   const go = (p: Page) => {
     setPage(p);
-    history.replaceState(null, "", `#${p}`);
+    history.replaceState(history.state, "", `#${p}`);
   };
 
   if (!me?.isAdmin) {

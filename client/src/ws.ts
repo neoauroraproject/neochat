@@ -82,12 +82,19 @@ function handle(t: string, d: any) {
       useApp.setState({ connected: true });
       s.setMe(d.user as User);
       s.setConfig(d.config as PublicConfig);
-      if (everConnected) s.markAllStale();
+      // Back after a disconnect: one request brings what was missed in every chat.
+      const wasConnected = everConnected;
       everConnected = true;
-      s.loadChats().then(() => {
-        const active = useApp.getState().activeChatId;
-        if (active) useApp.getState().loadMessages(active);
-      });
+      s.loadChats()
+        .then(async () => {
+          await useApp.getState().syncNow();
+          const active = useApp.getState().activeChatId;
+          if (active && (!wasConnected || useApp.getState().stale[active]))
+            await useApp.getState().loadMessages(active);
+          await useApp.getState().flushOutbox();
+          useApp.getState().prefetchRecent();
+        })
+        .catch(() => {});
       s.loadAds();
       break;
     }
@@ -128,6 +135,15 @@ function handle(t: string, d: any) {
       break;
     case "chat_removed":
       s.removeChat(d.chatId);
+      break;
+    case "reactions":
+      s.applyReactions(d.chatId, d.messageId, d.reactions || []);
+      break;
+    case "message_ttl":
+      s.applyTTL(d.chatId, d.items || []);
+      break;
+    case "pins":
+      if (s.activeChatId === d.chatId || s.pins[d.chatId]) s.loadPins(d.chatId);
       break;
     case "config":
       s.setConfig(d);

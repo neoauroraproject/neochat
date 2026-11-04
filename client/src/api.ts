@@ -69,6 +69,7 @@ export function upload(
   file: Blob,
   opts: {
     name?: string;
+    /** "voice", "file" (a photo kept as a document) or "avatar" (profile/room/brand image). */
     kind?: string;
     onProgress?: (p: number) => void;
     signal?: AbortSignal;

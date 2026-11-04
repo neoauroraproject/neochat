@@ -286,7 +286,13 @@ func pushText(m *Message, chatType, chatTitle, lang string) (p pushPayload, ok b
 		return pushPayload{Title: m.Sender.DisplayName, Body: pick(label, lang), ChatID: m.ChatID, Tag: callTag(m.ChatID)}, true
 	}
 	body := m.Text
-	if l, ok := mediaLabels[m.Kind]; ok {
+	switch {
+	case m.Kind == "locked":
+		body = pick([2]string{"🔒 Locked message", "🔒 پیام قفل‌دار"}, lang) // never the envelope
+	case m.Once > 0:
+		body = pick([2]string{"⏱ View-once media", "⏱ رسانه‌ی یک‌بار دیدنی"}, lang)
+	}
+	if l, ok := mediaLabels[m.Kind]; ok && m.Once == 0 {
 		if body == "" {
 			body = pick(l, lang)
 		} else {

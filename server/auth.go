@@ -358,6 +358,7 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request, u *User)
 			return errf(400, "bad_request", "invalid avatar")
 		}
 		u.Avatar = *req.Avatar
+		s.keepMedia(u.Avatar)
 	}
 	if req.Username != nil && !strings.EqualFold(*req.Username, u.Username) {
 		name := strings.TrimSpace(*req.Username)

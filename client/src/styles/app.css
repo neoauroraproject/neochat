@@ -2203,12 +2203,27 @@ button.tile:active {
   position: fixed;
   inset: 0;
   z-index: 150;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  animation: fade-in 200ms var(--ease-out);
+}
+/* the backdrop is its own layer so it can fade while the photo is dragged down */
+.viewer-bg {
+  position: absolute;
+  inset: 0;
   background: rgba(12, 14, 22, 0.94);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  pointer-events: none;
+}
+.viewer-media {
+  position: relative;
   display: grid;
   place-items: center;
-  animation: fade-in 200ms var(--ease-out);
+}
+.viewer .bar {
+  z-index: 1;
 }
 .viewer img,
 .viewer video {
@@ -2800,4 +2815,639 @@ button.tile:active {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* download manager: the file row is a button now; a ring with a cancel cross while it loads */
+button.file-box {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.file-box .fi {
+  position: relative;
+}
+.file-box .fi .fi-x {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+.file-box.done .fi {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.media-box .progress.dl {
+  cursor: pointer;
+  color: #fff;
+}
+.media-box .progress.dl > * {
+  grid-area: 1 / 1;
+}
+button.ft-row {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.viewer-dl .ring {
+  width: 22px;
+  height: 22px;
+  -webkit-mask: radial-gradient(circle, transparent 8px, #000 9px);
+  mask: radial-gradient(circle, transparent 8px, #000 9px);
+}
+
+/* storage: files about to leave the server, and files that already have */
+.expiry-chip {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.expiry-chip.inline {
+  position: static;
+  margin-top: 3px;
+  padding: 0;
+  color: var(--label-2);
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.file-box.expired .fi {
+  color: var(--label-2);
+  background: var(--fill, rgba(120, 120, 128, 0.12));
+}
+.file-box.expired .n {
+  color: var(--label-2);
+}
+
+/* settings → my storage */
+.my-storage .ms-head {
+  align-items: flex-start;
+}
+.ms-numbers {
+  font-size: 15px;
+}
+.ms-numbers b {
+  font-weight: 650;
+}
+.ms-bar {
+  height: 6px;
+  margin: 8px 0 6px;
+  border-radius: 99px;
+  background: var(--fill);
+  overflow: hidden;
+}
+.ms-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 400ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.ms-bar.warn i {
+  background: #ff9f0a;
+}
+.ms-bar.full i {
+  background: var(--danger);
+}
+.ms-warn {
+  font-size: 13px;
+  font-weight: 500;
+  color: #c77700;
+  margin-bottom: 4px;
+}
+.ms-warn.full {
+  color: var(--danger);
+}
+.ms-rule {
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+.ms-file .grow {
+  min-width: 0;
+}
+.ms-thumb {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--ft-doc-bg);
+  color: var(--ft-doc);
+}
+.ms-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ms-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: ltr;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+.rot180 {
+  transform: rotate(180deg);
+}
+
+/* a new version installed in the background */
+.update-banner {
+  white-space: nowrap;
+  position: fixed;
+  z-index: 160;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 99px;
+  font: inherit;
+  font-size: 13.5px;
+  color: #fff;
+  background: rgba(20, 22, 30, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  animation: banner-in 300ms cubic-bezier(0.22, 1.2, 0.36, 1);
+}
+.update-banner b {
+  color: var(--accent);
+}
+.segmented.small button {
+  padding: 4px 9px;
+  font-size: 12.5px;
+}
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+}
+
+/* ---------- release 5: messages ---------- */
+.fwd-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+.locked-box {
+  min-width: 220px;
+  white-space: normal;
+}
+.locked-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.locked-head .grow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.locked-head .muted {
+  font-size: 12.5px;
+  opacity: 0.8;
+  color: inherit;
+}
+.locked-icon,
+.once-icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(127, 127, 127, 0.18);
+}
+.locked-form {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.locked-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+}
+.locked-form.err input {
+  border-color: var(--danger);
+  animation: shake 360ms;
+}
+.locked-err {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+.locked-img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 11px;
+}
+.once-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  white-space: normal;
+}
+.once-box:disabled {
+  cursor: default;
+}
+.once-box .grow {
+  display: flex;
+  flex-direction: column;
+}
+.once-box .muted {
+  font-size: 12.5px;
+  color: inherit;
+  opacity: 0.75;
+}
+.once-icon b {
+  position: absolute;
+  bottom: -3px;
+  inset-inline-end: -3px;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 10.5px;
+  color: #fff;
+  background: var(--accent);
+}
+.once-box.opened .once-icon b {
+  background: #8e8e93;
+}
+.once-note {
+  position: absolute;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  inset-inline: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+}
+.ttl-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-inline-end: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.ttl-badge.live i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: conic-gradient(currentColor calc(var(--p) * 1turn), transparent 0);
+  box-shadow: 0 0 0 1px currentColor inset;
+}
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.msg.out .reactions {
+  justify-content: flex-end;
+}
+.react-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  font: inherit;
+  font-size: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-bubble);
+  cursor: pointer;
+}
+.react-chip b {
+  font-size: 12px;
+  color: var(--label-2);
+}
+.react-chip.mine {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.reaction-bar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 4px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  overflow-x: auto;
+}
+.reaction-bar button {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  font-size: 22px;
+  background: none;
+  cursor: pointer;
+  transition: transform 140ms;
+}
+.reaction-bar button:active {
+  transform: scale(1.3);
+}
+.reaction-bar button.on {
+  background: var(--accent-soft);
+}
+.menu:has(.reaction-bar) {
+  width: 300px;
+}
+
+/* selecting messages to forward, and the pinned bar */
+.select-bar,
+.pinned-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.18);
+  font: inherit;
+  text-align: start;
+  color: inherit;
+  background: var(--surface);
+}
+.select-bar b {
+  flex: 1;
+  text-align: center;
+}
+.pinned-bar {
+  cursor: pointer;
+}
+.pinned-bar .grow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.pinned-bar b {
+  font-size: 12.5px;
+  color: var(--accent);
+}
+.pinned-bar .grow span {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pin-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-self: stretch;
+  justify-content: center;
+}
+.pin-rail i {
+  width: 3px;
+  flex: 1;
+  max-height: 14px;
+  border-radius: 2px;
+  background: var(--accent-soft);
+}
+.pin-rail i.on {
+  background: var(--accent);
+}
+.msg.selecting {
+  position: relative;
+  cursor: pointer;
+  padding-inline-start: 34px;
+}
+.sel-check {
+  position: absolute;
+  inset-inline-start: 8px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid #aeaeb2;
+  color: #fff;
+}
+.msg.selected .sel-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.msg.selected .bubble {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.fwd-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.fwd-list .row.picked {
+  background: var(--accent-soft);
+}
+.mp-check.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ---------- locked composer, app lock, QR ---------- */
+.lock-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lock-compose textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+.lock-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fill);
+}
+.field-err {
+  margin-top: -4px;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+.pin-input {
+  letter-spacing: 0.4em;
+  text-align: center;
+  font-size: 20px;
+}
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: env(safe-area-inset-top, 0px) 24px env(safe-area-inset-bottom, 0px);
+  background: var(--bg, #f2f2f7);
+  animation: fade-in 160ms ease-out;
+}
+.lock-screen h2 {
+  margin: 6px 0 0;
+  font-size: 19px;
+  font-weight: 600;
+}
+.pin-dots {
+  display: flex;
+  gap: 14px;
+  margin: 6px 0;
+}
+.pin-dots i {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  transition: background 120ms;
+}
+.pin-dots i.on {
+  background: currentColor;
+}
+.pin-dots.shake {
+  animation: shake 400ms;
+}
+.pin-msg {
+  min-height: 18px;
+  font-size: 13px;
+  color: var(--danger);
+}
+.pin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 16px 22px;
+}
+.pin-pad button {
+  width: 72px;
+  height: 72px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: inherit;
+  font-size: 28px;
+  color: inherit;
+  background: var(--fill, rgba(120, 120, 128, 0.16));
+  cursor: pointer;
+}
+.pin-pad button:active {
+  background: var(--accent-soft);
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  75% {
+    transform: translateX(8px);
+  }
+}
+/* the app switcher's snapshot shows nothing while the app lock is on */
+html.privacy-blur #root {
+  filter: blur(24px);
+}
+.qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 4px;
+}
+.qr-svg {
+  width: min(260px, 70vw);
+  height: auto;
+  margin: 10px 0;
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
+}
+.qr-scan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.qr-scan video {
+  width: 100%;
+  max-height: 60vh;
+  border-radius: 16px;
+  object-fit: cover;
+  background: #000;
+}
+.qr-frame {
+  position: absolute;
+  top: 18%;
+  width: 56%;
+  aspect-ratio: 1;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+.me-card .qr-btn {
+  margin-inline-start: auto;
 }

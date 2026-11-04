@@ -385,7 +385,7 @@ function AdEditor({
                 className="btn btn-sm"
                 onClick={async () => {
                   const f = await pickFile("image/*");
-                  if (f) set("image", (await upload(f)).id);
+                  if (f) set("image", (await upload(f, { kind: "avatar" })).id);
                 }}
               >
                 <Icon name="image" size={16} />

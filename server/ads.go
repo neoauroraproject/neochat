@@ -153,6 +153,7 @@ func (s *Server) handleAdminSaveAd(w http.ResponseWriter, r *http.Request, u *Us
 		if m, err := s.mediaByID(a.Image); err != nil || m.Kind != "image" {
 			return errf(400, "bad_request", "invalid image")
 		}
+		s.keepMedia(a.Image)
 	}
 	if r.PathValue("id") != "" {
 		id, err := pathID(r, "id")

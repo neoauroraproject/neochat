@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { adHref, adsFor, adTarget, trackImpression } from "../ads";
 import { get, mediaUrl } from "../api";
 import { Icon } from "../components/Icon";
+import { startDownload } from "../downloads";
 import { Avatar, ColHead, Empty, Menu, type MenuItem } from "../components/ui";
 import { chatTitle, fileSize, listStamp, num, presenceText } from "../format";
 import { useT } from "../i18n";
@@ -257,12 +258,11 @@ function SharedList({
 
         {(kind === "documents" || kind === "other") &&
           items?.map((m) => (
-            <a
+            <button
               key={m.id}
               className="ft-row"
               data-kind={kind}
-              href={mediaUrl(m.media!.id)}
-              download={m.media!.name}
+              onClick={() => startDownload(m.media!)}
             >
               <span className="ft-ic">
                 <Icon name={type!.icon} size={20} filled />
@@ -274,7 +274,7 @@ function SharedList({
                 </span>
               </span>
               <Icon name="download" size={16} className="chev" />
-            </a>
+            </button>
           ))}
 
         {kind === "links" &&

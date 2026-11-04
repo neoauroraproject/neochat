@@ -38,6 +38,7 @@ export function useContacts() {
 export function useTick(ms = 30_000) {
   const [, set] = useState(0);
   useEffect(() => {
+    if (ms <= 0) return; // 0 = paused
     const id = setInterval(() => set((n) => n + 1), ms);
     return () => clearInterval(id);
   }, [ms]);

@@ -3,10 +3,19 @@ import { mediaUrl } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
 import { Avatar, usePress } from "../components/ui";
-import { callInfo, duration, fileSize, systemText, timeOf } from "../format";
+import { cancelDownload, saveFile, startDownload, useDownload } from "../downloads";
+import { callInfo, dateOf, duration, fileSize, systemText, timeOf } from "../format";
 import { useT } from "../i18n";
 import { useApp } from "../store";
 import type { Chat, Message } from "../types";
+import {
+  ForwardLabel,
+  LockedContent,
+  OnceContent,
+  react,
+  Reactions,
+  TtlBadge,
+} from "./MessageExtras";
 
 const urlRe = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?])/g;
 const mentionRe = /(@[a-zA-Z][a-zA-Z0-9_]{3,31})/g;
@@ -106,6 +115,10 @@ interface Props {
   onOpenMedia: (m: Message) => void;
   onJumpTo: (id: number) => void;
   onReply?: (m: Message) => void;
+  /** Selection mode (forwarding several messages): taps toggle instead of acting. */
+  selecting?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (m: Message) => void;
 }
 
 export const MessageItem = memo(function MessageItem({
@@ -119,14 +132,32 @@ export const MessageItem = memo(function MessageItem({
   onOpenMedia,
   onJumpTo,
   onReply,
+  selecting,
+  selected,
+  onToggleSelect,
 }: Props) {
   const t = useT();
   const lang = useApp((s) => s.lang);
   const meId = useApp((s) => s.me?.id);
   const press = usePress((x, y) => onMenu(m, x, y));
   const swipe = useSwipeReply(
-    onReply && m.id > 0 && m.kind !== "call" ? () => onReply(m) : undefined,
+    onReply && m.id > 0 && m.kind !== "call" && !selecting ? () => onReply(m) : undefined,
   );
+  const heartOk = useApp((s) => s.config?.reactionEmojis?.includes("❤️"));
+  const lastTap = useRef({ t: 0, x: 0, y: 0 });
+  // Two quick taps on the text: a quick heart.
+  const onBubbleUp = (e: React.PointerEvent) => {
+    if (selecting || m.id < 0 || !heartOk || m.kind === "call") return;
+    if ((e.target as HTMLElement).closest("button, a, img, video, input, form")) return;
+    const now = e.timeStamp;
+    const prev = lastTap.current;
+    if (now - prev.t < 300 && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 24) {
+      lastTap.current = { t: 0, x: 0, y: 0 };
+      const mine = m.reactions?.find((r) => meId && r.users.includes(meId))?.emoji;
+      react(m, mine === "❤️" ? "" : "❤️");
+      navigator.vibrate?.(8);
+    } else lastTap.current = { t: now, x: e.clientX, y: e.clientY };
+  };
 
   if (m.kind === "system") return <div className="sys-msg">{systemText(m, lang)}</div>;
 
@@ -140,6 +171,7 @@ export const MessageItem = memo(function MessageItem({
   const stamp = (
     <span className="stamp">
       {m.editedAt ? `${t("chat.edited")} · ` : ""}
+      <TtlBadge m={m} />
       {timeOf(m.createdAt, lang)}
       {out &&
         (m.failed ? (
@@ -178,13 +210,27 @@ export const MessageItem = memo(function MessageItem({
 
   return (
     <div
-      className={`msg ${out ? "out" : "in"}${first ? " first" : ""}${last ? " last" : ""}${fresh ? " fresh" : ""}`}
+      className={`msg ${out ? "out" : "in"}${first ? " first" : ""}${last ? " last" : ""}${fresh ? " fresh" : ""}${selecting ? " selecting" : ""}${selected ? " selected" : ""}`}
       data-id={m.id}
       ref={swipe.ref}
       {...swipe.handlers}
-      {...press}
-      onClick={m.failed ? () => onMenu(m, 0, 0) : undefined}
+      {...(selecting ? {} : press)}
+      onClickCapture={
+        selecting
+          ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleSelect?.(m);
+            }
+          : undefined
+      }
+      onClick={m.failed && !selecting ? () => onMenu(m, 0, 0) : undefined}
     >
+      {selecting && (
+        <span className="sel-check" aria-hidden="true">
+          {selected && <Icon name="check" size={14} stroke={3} />}
+        </span>
+      )}
       <span className="reply-hint" aria-hidden="true">
         <Icon name="reply" size={20} />
       </span>
@@ -198,9 +244,11 @@ export const MessageItem = memo(function MessageItem({
       <div className="msg-col">
         {meta}
         <div
-          className={`bubble${mediaOnly ? " media-only" : ""}`}
+          className={`bubble${mediaOnly && !m.once ? " media-only" : ""}`}
           title={timeOf(m.createdAt, lang)}
+          onPointerUp={onBubbleUp}
         >
+          {m.fwdName && <ForwardLabel name={m.fwdName} />}
           {showSender && (
             <div className="sender" style={{ ["--h" as string]: senderHue(m.senderId) }}>
               {m.sender.displayName}
@@ -218,10 +266,16 @@ export const MessageItem = memo(function MessageItem({
           )}
           {m.kind === "call" ? (
             <CallBubble m={m} chat={chat} out={m.senderId === meId} />
+          ) : m.kind === "locked" ? (
+            <LockedContent m={m} />
+          ) : m.once ? (
+            <OnceContent m={m} out={m.senderId === meId} onOpen={() => onOpenMedia(m)} />
           ) : (
             <MediaContent m={m} onOpen={() => onOpenMedia(m)} />
           )}
-          {m.text && m.kind !== "call" && <div className="text">{linkify(m.text)}</div>}
+          {m.text && m.kind !== "call" && m.kind !== "locked" && !m.once && (
+            <div className="text">{linkify(m.text)}</div>
+          )}
           {m.failed && (
             <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 2 }}>
               {t("chat.failed")}
@@ -229,6 +283,7 @@ export const MessageItem = memo(function MessageItem({
           )}
           {stamp}
         </div>
+        <Reactions m={m} />
       </div>
     </div>
   );
@@ -239,10 +294,10 @@ const senderHues = [28, 150, 196, 258, 318, 344, 212, 80];
 const senderHue = (id: number) => senderHues[Math.abs(id) % senderHues.length];
 
 function MediaContent({ m, onOpen }: { m: Message; onOpen: () => void }) {
-  const t = useT();
-  const lang = useApp((s) => s.lang);
   const md = m.media;
+  const dl = useDownload(md?.id);
   if (!md) return null;
+  if (md.expired) return <ExpiredMedia m={m} onOpen={onOpen} />;
   const src = m.localUrl || (md.id ? mediaUrl(md.id) : "");
   const progress =
     m.pending && m.progress !== undefined ? (
@@ -265,7 +320,8 @@ function MediaContent({ m, onOpen }: { m: Message; onOpen: () => void }) {
           loading="lazy"
           decoding="async"
         />
-        {progress}
+        {progress || (md.id && <DownloadOverlay id={md.id} />)}
+        <ExpiryChip at={md.expiresAt} />
       </button>
     );
   }
@@ -275,45 +331,149 @@ function MediaContent({ m, onOpen }: { m: Message; onOpen: () => void }) {
         {src && (
           <video src={src + (m.localUrl ? "" : "#t=0.1")} preload="metadata" muted playsInline />
         )}
-        {progress || (
-          <span className="play">
-            <Icon name="play" size={24} filled />
-          </span>
-        )}
+        {progress ||
+          (dl?.state === "loading" ? (
+            <DownloadOverlay id={md.id} />
+          ) : (
+            <span className="play">
+              <Icon name="play" size={24} filled />
+            </span>
+          ))}
+        <ExpiryChip at={md.expiresAt} />
       </button>
     );
   }
   if (m.kind === "voice" || m.kind === "audio") return <VoicePlayer m={m} src={src} />;
+  return <FileBox m={m} />;
+}
+
+const WEEK = 7 * 86_400_000;
+
+/** "On the server until 14 Azar" — shown only in the last week, so it reads as a heads-up. */
+function ExpiryChip({ at, inline }: { at?: number; inline?: boolean }) {
+  const t = useT();
+  const lang = useApp((s) => s.lang);
+  if (!at || at - Date.now() > WEEK || at < Date.now()) return null;
   return (
-    <a
-      className="file-box"
-      href={md.id ? mediaUrl(md.id) : undefined}
-      download={md.name}
-      onClick={(e) => m.pending && e.preventDefault()}
+    <span className={`expiry-chip${inline ? " inline" : ""}`}>
+      <Icon name="clock" size={11} />
+      {t("storage.until", { d: dateOf(at, lang) })}
+    </span>
+  );
+}
+
+/**
+ * A file whose bytes left the server. Its message stays with the name and size; a photo the
+ * phone still has in its media cache keeps showing.
+ */
+function ExpiredMedia({ m, onOpen }: { m: Message; onOpen: () => void }) {
+  const t = useT();
+  const lang = useApp((s) => s.lang);
+  const md = m.media!;
+  const [gone, setGone] = useState(m.kind !== "image");
+  if (!gone)
+    return (
+      <button className="media-box" onClick={onOpen}>
+        <img src={mediaUrl(md.id, !!md.hasThumb)} alt={md.name} onError={() => setGone(true)} />
+      </button>
+    );
+  return (
+    <div className="file-box expired">
+      <span className="fi">
+        <Icon name="clock" size={20} />
+      </span>
+      <span className="grow">
+        <span className="n" style={{ display: "block" }}>
+          {md.name || t("chat.file")}
+        </span>
+        <span className="s">
+          {fileSize(md.size, lang)} · {t("storage.expired")}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** A small ring for upload or download progress, sized to sit in the file icon. */
+function Ring({ p }: { p: number }) {
+  return (
+    <div
+      className="ring"
+      style={{
+        ["--p" as string]: p,
+        width: 34,
+        height: 34,
+        WebkitMask: "radial-gradient(circle, transparent 13px, #000 14px)",
+        mask: "radial-gradient(circle, transparent 13px, #000 14px)",
+      }}
+    />
+  );
+}
+
+/** Download ring over a photo or video while the file itself is being saved. */
+function DownloadOverlay({ id }: { id: string }) {
+  const job = useDownload(id);
+  if (job?.state !== "loading") return null;
+  return (
+    <span
+      className="progress dl"
+      role="button"
+      aria-label="cancel"
+      onClick={(e) => {
+        e.stopPropagation();
+        cancelDownload(id);
+      }}
+    >
+      <div className="ring" style={{ ["--p" as string]: job.progress }} />
+      <Icon name="x" size={16} />
+    </span>
+  );
+}
+
+function FileBox({ m }: { m: Message }) {
+  const t = useT();
+  const lang = useApp((s) => s.lang);
+  const md = m.media!;
+  const job = useDownload(md.id);
+  const loading = job?.state === "loading";
+  const done = job?.state === "done";
+  const onClick = () => {
+    if (m.pending || !md.id) return;
+    if (loading) cancelDownload(md.id);
+    else if (done) saveFile(md);
+    else startDownload(md);
+  };
+  return (
+    <button
+      className={`file-box${done ? " done" : ""}`}
+      onClick={onClick}
+      aria-label={loading ? t("common.cancel") : done ? t("dl.save") : t("chat.download")}
     >
       <span className="fi">
         {m.pending ? (
-          <div
-            className="ring"
-            style={{
-              ["--p" as string]: m.progress || 0,
-              width: 34,
-              height: 34,
-              WebkitMask: "radial-gradient(circle, transparent 13px, #000 14px)",
-              mask: "radial-gradient(circle, transparent 13px, #000 14px)",
-            }}
-          />
+          <Ring p={m.progress || 0} />
+        ) : loading ? (
+          <>
+            <Ring p={job.progress} />
+            <Icon name="x" size={14} className="fi-x" />
+          </>
         ) : (
-          <Icon name="download" size={22} />
+          <Icon name={done ? "check" : "download"} size={22} />
         )}
       </span>
       <span className="grow">
         <span className="n" style={{ display: "block" }}>
           {md.name || t("chat.file")}
         </span>
-        <span className="s">{fileSize(md.size, lang)}</span>
+        <span className="s">
+          {loading
+            ? `${fileSize(md.size * job.progress, lang)} / ${fileSize(md.size, lang)}`
+            : fileSize(md.size, lang)}
+          {done && ` · ${t("dl.done")}`}
+        </span>
+        <ExpiryChip at={md.expiresAt} inline />
       </span>
-    </a>
+    </button>
   );
 }
 

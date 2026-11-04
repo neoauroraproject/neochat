@@ -1,7 +1,18 @@
 import { create } from "zustand";
 import { type ApiError, del, get, patch, post, setToken, upload } from "./api";
 import { cacheGet, cacheSetLater } from "./cache";
-import type { Ad, Chat, Message, PublicConfig, User } from "./types";
+import { errorText } from "./i18n";
+import { compressImage } from "./imagecompress";
+import {
+  deleteMessages,
+  getMessages,
+  outboxAll,
+  outboxDelete,
+  outboxPut,
+  putMessages,
+  trimChat,
+} from "./localdb";
+import type { Ad, Chat, Message, PublicConfig, Reaction, User } from "./types";
 
 export type Section = "chats" | "calls" | "explore" | "settings";
 export type Filter = "all" | "direct" | "groups" | "channels" | "unread" | "archive";
@@ -31,6 +42,10 @@ interface AppState {
   infoOpen: boolean;
   ads: Ad[];
   drafts: Record<number, string>;
+  /** Pinned messages per chat, newest first (loaded when the chat opens). */
+  pins: Record<number, Message[]>;
+  /** A message to scroll to once its chat is open (search result, pinned bar). */
+  jumpTo: { chatId: number; messageId: number } | null;
   toasts: Toast[];
   pendingJoin: string | null;
 
@@ -54,7 +69,16 @@ interface AppState {
   sendFile(
     chatId: number,
     file: File | Blob,
-    opts?: { caption?: string; kind?: string; name?: string; replyTo?: Message | null },
+    opts?: {
+      caption?: string;
+      kind?: string;
+      name?: string;
+      replyTo?: Message | null;
+      /** A photo or video that can be opened once (private chats). */
+      once?: boolean;
+      /** Send a photo untouched, as a document (the preview's "without compression"). */
+      original?: boolean;
+    },
   ): void;
   retry(m: Message): void;
   discard(m: Message): void;
@@ -65,6 +89,8 @@ interface AppState {
   applyMessage(m: Message): void;
   applyEdit(m: Message): void;
   applyDelete(chatId: number, id: number, lastMessageId: number): void;
+  /** A file left the server (deleted from "My storage"): its messages show it as expired. */
+  markMediaExpired(mediaId: string): void;
   applyRead(chatId: number, userId: number, messageId: number): void;
   applyPresence(userId: number, p: Partial<User>): void;
   applyUser(u: User): void;
@@ -72,6 +98,16 @@ interface AppState {
   markAllStale(): void;
   loadAds(): Promise<void>;
   setDraft(chatId: number, text: string): void;
+  /** Catches up after being offline: missed messages and changes in one request. */
+  syncNow(): Promise<void>;
+  /** Sends what was written while offline, in order. */
+  flushOutbox(): Promise<void>;
+  /** Loads the latest messages of the recent chats so they open without the network. */
+  prefetchRecent(): Promise<void>;
+  applyReactions(chatId: number, messageId: number, reactions: Reaction[]): void;
+  applyTTL(chatId: number, items: { id: number; destroyAt: number }[]): void;
+  loadPins(chatId: number): Promise<void>;
+  sendLocked(chatId: number, envelope: string, file?: Blob, replyTo?: Message | null): void;
 }
 
 const readPref = <T extends string>(key: string, fallback: T): T => {
@@ -91,7 +127,29 @@ const writePref = (key: string, v: string) => {
 
 let tempId = -1;
 const clientId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-const files = new Map<string, { file: File | Blob; kind?: string; name?: string }>();
+const files = new Map<
+  string,
+  { file: File | Blob; kind?: string; name?: string; compress?: boolean }
+>();
+/** Extra fields of a pending send (locked envelope, view-once) by client id. */
+const sendExtras = new Map<string, { kind?: string; once?: boolean }>();
+let syncing = false;
+let flushing = false;
+const SYNC_KEY = (uid: number) => `neochat.sync.${uid}`;
+const readCursor = (uid: number): { msg: number; ev: number } | null => {
+  try {
+    return JSON.parse(localStorage.getItem(SYNC_KEY(uid)) || "null");
+  } catch {
+    return null;
+  }
+};
+const writeCursor = (uid: number, c: { msg: number; ev: number }) => {
+  try {
+    localStorage.setItem(SYNC_KEY(uid), JSON.stringify(c));
+  } catch {
+    /* private mode */
+  }
+};
 
 /** Merge by id, keep order, keep optimistic (negative id) messages at the end. */
 function merge(existing: Message[], incoming: Message[]): Message[] {
@@ -109,12 +167,24 @@ function merge(existing: Message[], incoming: Message[]): Message[] {
 }
 
 export const useApp = create<AppState>((set, getState) => {
+  // The phone keeps a longer history than the admin's per-chat setting asks for at minimum.
+  const keepPerChat = () => {
+    const limit = getState().config?.clientCacheMessages ?? 200;
+    return limit <= 0 ? 0 : Math.max(limit, 1000);
+  };
+  const saveTimers = new Map<number, number>();
   const cacheMessages = (chatId: number) => {
     const me = getState().me;
-    const limit = getState().config?.clientCacheMessages ?? 200;
-    if (!me || limit <= 0) return;
-    cacheSetLater(`msgs:${me.id}:${chatId}`, () =>
-      (getState().messages[chatId] || []).filter((m) => m.id > 0).slice(-limit),
+    const keep = keepPerChat();
+    if (!me || keep <= 0) return;
+    window.clearTimeout(saveTimers.get(chatId));
+    saveTimers.set(
+      chatId,
+      window.setTimeout(() => {
+        saveTimers.delete(chatId);
+        const list = (getState().messages[chatId] || []).filter((m) => m.id > 0).slice(-keep);
+        putMessages(me.id, list).then(() => trimChat(me.id, chatId, keep));
+      }, 800),
     );
   };
   const cacheChats = () => {
@@ -144,6 +214,20 @@ export const useApp = create<AppState>((set, getState) => {
     try {
       let mediaId = "";
       if (f) {
+        if (f.compress && f.file instanceof File) {
+          // Once per file: a retry uploads the already compressed copy.
+          f.file = await compressImage(f.file);
+          f.name = f.file instanceof File ? f.file.name : f.name;
+          f.compress = false;
+          const size = f.file.size;
+          patchMessages(chatId, (l) =>
+            l.map((m) =>
+              m.clientId === pending.clientId && m.media
+                ? { ...m, media: { ...m.media, size } }
+                : m,
+            ),
+          );
+        }
         const media = await upload(f.file, {
           name: f.name,
           kind: f.kind,
@@ -155,26 +239,69 @@ export const useApp = create<AppState>((set, getState) => {
         mediaId = media.id;
         await before;
       }
+      const extra = pending.clientId ? sendExtras.get(pending.clientId) : undefined;
       const m = await post<Message>(`/api/chats/${chatId}/messages`, {
         text: pending.text,
         mediaId,
         replyTo: pending.replyTo || 0,
         clientId: pending.clientId,
+        kind: extra?.kind,
+        once: extra?.once,
       });
-      if (pending.clientId) files.delete(pending.clientId);
+      if (pending.clientId) {
+        files.delete(pending.clientId);
+        sendExtras.delete(pending.clientId);
+        const me = getState().me;
+        if (me) outboxDelete(me.id, pending.clientId);
+      }
       if (pending.localUrl) setTimeout(() => URL.revokeObjectURL(pending.localUrl!), 30_000);
       getState().applyMessage(m);
     } catch (e) {
-      patchMessages(chatId, (l) =>
-        l.map((m) =>
-          m.clientId === pending.clientId ? { ...m, pending: false, failed: true } : m,
-        ),
-      );
       const err = e as ApiError;
-      if (err.code && err.code !== "network") getState().toast(err.message, "error");
+      // No connection (or the server is restarting): the message waits in the outbox with its
+      // clock and goes by itself once we are back. Only a real refusal is shown as failed.
+      const offline = !err.status || err.status >= 500 || err.code === "network";
+      if (offline) {
+        patchMessages(chatId, (l) =>
+          l.map((m) =>
+            m.clientId === pending.clientId ? { ...m, pending: true, progress: 0 } : m,
+          ),
+        );
+      } else {
+        patchMessages(chatId, (l) =>
+          l.map((m) =>
+            m.clientId === pending.clientId ? { ...m, pending: false, failed: true } : m,
+          ),
+        );
+        const me = getState().me;
+        if (me && pending.clientId) outboxDelete(me.id, pending.clientId);
+        if (err.code) getState().toast(errorText(getState().lang, err), "error");
+      }
     } finally {
       release();
     }
+  };
+
+  /** Writes a pending send to the outbox so it survives the app being closed. */
+  const remember = (m: Message) => {
+    const me = getState().me;
+    if (!me || !m.clientId) return;
+    const f = files.get(m.clientId);
+    const extra = sendExtras.get(m.clientId);
+    outboxPut(me.id, {
+      clientId: m.clientId,
+      chatId: m.chatId,
+      createdAt: m.createdAt,
+      text: m.text,
+      replyTo: m.replyTo,
+      kind: extra?.kind,
+      once: extra?.once,
+      file: f?.file,
+      fileName: f?.name,
+      fileKind: f?.kind,
+      compress: f?.compress,
+      message: { ...m, localUrl: undefined, progress: undefined },
+    });
   };
 
   return {
@@ -201,6 +328,8 @@ export const useApp = create<AppState>((set, getState) => {
       }
     })(),
     drafts: {},
+    pins: {},
+    jumpTo: null,
     toasts: [],
     pendingJoin: null,
 
@@ -208,7 +337,38 @@ export const useApp = create<AppState>((set, getState) => {
       set((s) => ({ config: c, lang: s.lang || c.defaultLang, theme: s.theme || c.defaultTheme }));
     },
     setMe(u) {
+      const first = !getState().me && !!u;
       set({ me: u });
+      if (u && first) {
+        // Messages written while offline come back with their clock, even after a restart.
+        outboxAll(u.id).then((items) => {
+          for (const it of items) {
+            if (files.has(it.clientId) || sendExtras.has(it.clientId)) continue;
+            if (it.file)
+              files.set(it.clientId, {
+                file: it.file,
+                kind: it.fileKind,
+                name: it.fileName,
+                compress: it.compress,
+              });
+            if (it.kind || it.once) sendExtras.set(it.clientId, { kind: it.kind, once: it.once });
+            const localUrl =
+              it.file && /^(image|video)/.test(it.file.type)
+                ? URL.createObjectURL(it.file)
+                : undefined;
+            const m = { ...it.message, pending: true, failed: false, localUrl };
+            set((st) => {
+              const l = st.messages[it.chatId];
+              if (l?.some((x) => x.clientId === it.clientId)) return {};
+              return { messages: { ...st.messages, [it.chatId]: [...(l || []), m] } };
+            });
+          }
+          if (getState().connected) getState().flushOutbox();
+        });
+        cacheGet<Record<number, string>>(`drafts:${u.id}`).then((d) => {
+          if (d) set((st) => ({ drafts: { ...d, ...st.drafts } }));
+        });
+      }
       if (u) {
         cacheGet<Chat[]>(`chats:${u.id}`).then((list) => {
           if (list && !getState().chatsLoaded) {
@@ -285,13 +445,16 @@ export const useApp = create<AppState>((set, getState) => {
         if (!s.messages[id] || s.stale[id]) {
           const me = s.me;
           if (me && !s.messages[id]) {
-            cacheGet<Message[]>(`msgs:${me.id}:${id}`).then((cached) => {
-              if (cached?.length && !getState().messages[id])
+            getMessages(me.id, id, keepPerChat() || 200).then((cached) => {
+              if (cached.length && !getState().messages[id])
                 set((st) => ({ messages: { ...st.messages, [id]: cached } }));
             });
           }
-          s.loadMessages(id);
+          s.loadMessages(id).catch(() => {
+            /* offline: the local copy is shown */
+          });
         }
+        s.loadPins(id);
       }
     },
     async openDirect(userId) {
@@ -366,6 +529,7 @@ export const useApp = create<AppState>((set, getState) => {
         clientId: clientId(),
         pending: true,
       };
+      remember(m);
       patchMessages(chatId, (l) => [...l, m]);
       doSend(chatId, m);
     },
@@ -376,19 +540,26 @@ export const useApp = create<AppState>((set, getState) => {
       const kind: Message["kind"] =
         opts.kind === "voice"
           ? "voice"
-          : type.startsWith("image/") && !type.includes("svg")
-            ? "image"
-            : type.startsWith("video/")
-              ? "video"
-              : type.startsWith("audio/")
-                ? "audio"
-                : "file";
+          : opts.original
+            ? "file"
+            : type.startsWith("image/") && !type.includes("svg")
+              ? "image"
+              : type.startsWith("video/")
+                ? "video"
+                : type.startsWith("audio/")
+                  ? "audio"
+                  : "file";
       const localUrl =
         kind === "image" || kind === "video" || kind === "voice"
           ? URL.createObjectURL(file)
           : undefined;
       const name = opts.name || (file instanceof File ? file.name : "file");
-      files.set(cid, { file, kind: opts.kind, name });
+      files.set(cid, {
+        file,
+        kind: opts.original ? "file" : opts.kind,
+        name,
+        compress: kind === "image",
+      });
       const m: Message = {
         id: tempId--,
         chatId,
@@ -409,7 +580,45 @@ export const useApp = create<AppState>((set, getState) => {
         progress: 0,
         localUrl,
       };
+      if (opts.once) sendExtras.set(cid, { once: true });
       patchMessages(chatId, (l) => [...l, m]);
+      remember(m);
+      doSend(chatId, m);
+    },
+    sendLocked(chatId, envelope, file, replyTo) {
+      const me = getState().me!;
+      const cid = clientId();
+      sendExtras.set(cid, { kind: "locked" });
+      if (file) files.set(cid, { file, kind: "file", name: "locked.bin" });
+      const m: Message = {
+        id: tempId--,
+        chatId,
+        senderId: me.id,
+        sender: {
+          id: me.id,
+          username: me.username,
+          displayName: me.displayName,
+          avatar: me.avatar,
+        },
+        kind: "locked",
+        text: envelope,
+        media: file
+          ? {
+              id: "",
+              kind: "file",
+              mime: "application/octet-stream",
+              name: "locked.bin",
+              size: file.size,
+            }
+          : undefined,
+        replyTo: replyTo?.id,
+        createdAt: Date.now(),
+        clientId: cid,
+        pending: true,
+        progress: file ? 0 : undefined,
+      };
+      patchMessages(chatId, (l) => [...l, m]);
+      remember(m);
       doSend(chatId, m);
     },
     retry(m) {
@@ -477,8 +686,24 @@ export const useApp = create<AppState>((set, getState) => {
         );
       patchChat(m.chatId, (c) => (c.lastMessage?.id === m.id ? { lastMessage: m } : {}));
     },
+    markMediaExpired(mediaId) {
+      for (const [cid, list] of Object.entries(getState().messages)) {
+        if (list.some((m) => m.media?.id === mediaId))
+          patchMessages(Number(cid), (l) =>
+            l.map((m) =>
+              m.media?.id === mediaId ? { ...m, media: { ...m.media, expired: true } } : m,
+            ),
+          );
+      }
+    },
     applyDelete(chatId, id, lastMessageId) {
+      const me = getState().me;
+      if (me) deleteMessages(me.id, [id]);
       if (getState().messages[chatId]) patchMessages(chatId, (l) => l.filter((x) => x.id !== id));
+      if (getState().pins[chatId]?.some((p) => p.id === id))
+        set((st) => ({
+          pins: { ...st.pins, [chatId]: st.pins[chatId].filter((p) => p.id !== id) },
+        }));
       const c = getState().chats[chatId];
       if (c && c.lastMessage?.id === id) {
         const prev = (getState().messages[chatId] || [])
@@ -548,6 +773,130 @@ export const useApp = create<AppState>((set, getState) => {
     },
     setDraft(chatId, text) {
       set((s) => ({ drafts: { ...s.drafts, [chatId]: text } }));
+      const me = getState().me;
+      if (me) cacheSetLater(`drafts:${me.id}`, () => getState().drafts, 600);
+    },
+
+    async syncNow() {
+      const me = getState().me;
+      if (!me || syncing) return;
+      syncing = true;
+      try {
+        let cursor = readCursor(me.id);
+        for (let round = 0; round < 10; round++) {
+          const q = cursor ? `?msg=${cursor.msg}&ev=${cursor.ev}` : "";
+          const res = await get<{
+            messages: Message[];
+            events: {
+              id: number;
+              chatId: number;
+              kind: string;
+              messageId?: number;
+              userId?: number;
+              message?: Message;
+              data?: unknown;
+            }[];
+            cursor: { msg: number; ev: number };
+            more?: boolean;
+            reset?: boolean;
+          }>(`/api/sync${q}`);
+          if (res.reset) getState().markAllStale();
+          const s = getState();
+          for (const m of res.messages) s.applyMessage(m);
+          for (const e of res.events) {
+            if (e.kind === "edit" && e.message) s.applyEdit(e.message);
+            else if (e.kind === "delete" && e.messageId) s.applyDelete(e.chatId, e.messageId, 0);
+            else if (e.kind === "read" && e.userId && e.messageId)
+              s.applyRead(e.chatId, e.userId, e.messageId);
+            else if (e.kind === "reaction" && e.messageId)
+              s.applyReactions(e.chatId, e.messageId, (e.data as Reaction[]) || []);
+            else if (e.kind === "ttl")
+              s.applyTTL(e.chatId, (e.data as { id: number; destroyAt: number }[]) || []);
+            else if (e.kind === "pin" && s.activeChatId === e.chatId) s.loadPins(e.chatId);
+          }
+          cursor = res.cursor;
+          writeCursor(me.id, cursor);
+          if (!res.more) break;
+        }
+      } catch {
+        // Fall back to reloading what is on screen.
+        getState().markAllStale();
+      } finally {
+        syncing = false;
+      }
+    },
+
+    async flushOutbox() {
+      const me = getState().me;
+      if (!me || flushing) return;
+      flushing = true;
+      try {
+        const items = await outboxAll(me.id);
+        for (const it of items) {
+          const m = (getState().messages[it.chatId] || []).find((x) => x.clientId === it.clientId);
+          if (!m || !getState().connected) continue;
+          await doSend(it.chatId, { ...m, pending: true, failed: false });
+        }
+      } finally {
+        flushing = false;
+      }
+    },
+
+    async prefetchRecent() {
+      const s = getState();
+      const me = s.me;
+      if (!me || keepPerChat() <= 0) return;
+      const recent = Object.values(s.chats)
+        .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+        .slice(0, 30);
+      const thumbs = new Set<string>();
+      for (const c of recent) {
+        if (c.avatar) thumbs.add(c.avatar);
+        if (c.peer?.avatar) thumbs.add(c.peer.avatar);
+      }
+      for (const c of recent) {
+        if (!getState().connected) return;
+        const loaded = getState().messages[c.id];
+        if (!loaded || getState().stale[c.id]) {
+          try {
+            const res = await get<{ messages: Message[] }>(`/api/chats/${c.id}/messages?limit=50`);
+            await putMessages(me.id, res.messages);
+            for (const m of res.messages) {
+              if (m.media?.hasThumb && !m.once) thumbs.add(m.media.id);
+              if (m.sender.avatar) thumbs.add(m.sender.avatar);
+            }
+          } catch {
+            return;
+          }
+        }
+      }
+      // Warm the media cache (through the service worker) with small previews and photos.
+      for (const id of thumbs) {
+        if (!getState().connected) return;
+        await fetch(`/media/${id}/thumb`).catch(() => {});
+      }
+    },
+
+    applyReactions(chatId, messageId, reactions) {
+      if (getState().messages[chatId])
+        patchMessages(chatId, (l) => l.map((m) => (m.id === messageId ? { ...m, reactions } : m)));
+    },
+
+    applyTTL(chatId, items) {
+      const at = new Map(items.map((i) => [i.id, i.destroyAt]));
+      if (getState().messages[chatId])
+        patchMessages(chatId, (l) =>
+          l.map((m) => (at.has(m.id) ? { ...m, destroyAt: at.get(m.id) } : m)),
+        );
+    },
+
+    async loadPins(chatId) {
+      try {
+        const list = await get<Message[]>(`/api/chats/${chatId}/pins`);
+        set((st) => ({ pins: { ...st.pins, [chatId]: list } }));
+      } catch {
+        /* offline: keep what we had */
+      }
     },
   };
 });

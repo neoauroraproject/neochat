@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { adHref, adsFor, adTarget, closeChatTopAd, nextChatTopAd, trackImpression } from "../ads";
-import { mediaUrl, post } from "../api";
+import { del, mediaUrl, post } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
+import { startDownload } from "../downloads";
 import { Avatar, Menu, type MenuItem } from "../components/ui";
 import { chatTitle, dayLabel, num, presenceText } from "../format";
 import { useT } from "../i18n";
@@ -15,6 +16,8 @@ import { goBack } from "./nav";
 import { useStaged } from "./MediaPreview";
 import { MediaViewer } from "./MediaViewer";
 import { Members } from "./InfoPanel";
+import { ForwardModal } from "./ForwardModal";
+import { ReactionBar } from "./MessageExtras";
 import { MessageItem } from "./MessageItem";
 
 const EMPTY: Message[] = [];
@@ -48,6 +51,19 @@ export function Conversation({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [viewer, setViewer] = useState<Message | null>(null);
+  // Selection mode for forwarding several messages, and the forward sheet itself.
+  const [selected, setSelected] = useState<number[] | null>(null);
+  const [forwarding, setForwarding] = useState<Message[] | null>(null);
+  const pins = useApp((s) => s.pins[chat.id]);
+  const [pinIdx, setPinIdx] = useState(0);
+  useEffect(() => setSelected(null), [chat.id]);
+  const toggleSelect = useCallback(
+    (m: Message) =>
+      setSelected((sel) =>
+        !sel ? sel : sel.includes(m.id) ? sel.filter((x) => x !== m.id) : [...sel, m.id],
+      ),
+    [],
+  );
   const [dragging, setDragging] = useState(false);
   const [unreadAnchor, setUnreadAnchor] = useState(0);
   const [view, setView] = useState<"messages" | "members">("messages");
@@ -129,16 +145,41 @@ export function Conversation({
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
-  const jumpTo = useCallback((id: number) => {
-    const el = scroller.current?.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    const b = el.querySelector(".bubble") as HTMLElement | null;
-    b?.animate(
-      [{ transform: "scale(1)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }],
-      { duration: 400, easing: "ease-out" },
-    );
-  }, []);
+  const jumpTo = useCallback(
+    async (id: number) => {
+      let el = scroller.current?.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
+      // Older than what is loaded: page back through the history until it shows up.
+      for (let i = 0; !el && i < 15; i++) {
+        const s = useApp.getState();
+        if (s.hasMore[chat.id] === false) break;
+        try {
+          await s.loadMessages(chat.id, true);
+        } catch {
+          break;
+        }
+        await new Promise((r) => requestAnimationFrame(r));
+        el = scroller.current?.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
+      }
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const b = el.querySelector(".bubble") as HTMLElement | null;
+      b?.animate(
+        [{ transform: "scale(1)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }],
+        { duration: 400, easing: "ease-out" },
+      );
+    },
+    [chat.id],
+  );
+
+  // A search result or the pinned bar asked for a message in this chat.
+  const jumpReq = useApp((s) => s.jumpTo);
+  const loadedCount = useApp((s) => s.messages[chat.id]?.length ?? 0);
+  useEffect(() => {
+    if (!jumpReq || jumpReq.chatId !== chat.id || !loadedCount) return;
+    useApp.setState({ jumpTo: null });
+    const id = jumpReq.messageId;
+    window.setTimeout(() => jumpTo(id), 120);
+  }, [jumpReq, chat.id, loadedCount, jumpTo]);
 
   const onMenu = useCallback((m: Message, x: number, y: number) => {
     if (m.failed) {
@@ -152,8 +193,32 @@ export function Conversation({
   const menuItems = (m: Message): MenuItem[] => {
     const mine = m.senderId === me.id;
     const admin = chat.role !== "member" && chat.type !== "direct";
+    const canForward = m.kind !== "call" && m.kind !== "system" && !m.once && !m.media?.expired;
+    const pinned = !!pins?.some((p) => p.id === m.id);
+    const canPin = chat.type === "direct" || chat.role !== "member";
     return [
       { icon: "reply", label: t("chat.reply"), onClick: () => setReplyTo(m), hidden: !canPost },
+      {
+        icon: "share",
+        label: t("fwd.forward"),
+        onClick: () => setForwarding([m]),
+        hidden: !canForward,
+      },
+      {
+        icon: "pin",
+        label: t(pinned ? "pin.unpin" : "pin.pin"),
+        onClick: () =>
+          (pinned ? del(`/api/messages/${m.id}/pin`) : post(`/api/messages/${m.id}/pin`))
+            .then(() => useApp.getState().loadPins(chat.id))
+            .catch(() => {}),
+        hidden: !canPin || m.kind === "system",
+      },
+      {
+        icon: "checks",
+        label: t("fwd.select"),
+        onClick: () => setSelected([m.id]),
+        hidden: !canForward,
+      },
       {
         icon: "copy",
         label: t("chat.copy"),
@@ -163,14 +228,15 @@ export function Conversation({
       {
         icon: "download",
         label: t("chat.download"),
-        onClick: () => window.open(mediaUrl(m.media!.id), "_blank"),
+        onClick: () => startDownload(m.media!),
         hidden: !m.media?.id,
       },
       {
         icon: "edit",
         label: t("common.edit"),
         onClick: () => setEditing(m),
-        hidden: !mine || m.kind === "call" || m.kind === "system",
+        hidden:
+          !mine || m.kind === "call" || m.kind === "system" || m.kind === "locked" || !!m.once,
       },
       {
         icon: "trash",
@@ -246,6 +312,9 @@ export function Conversation({
           onOpenMedia={setViewer}
           onJumpTo={jumpTo}
           onReply={canPost ? setReplyTo : undefined}
+          selecting={!!selected}
+          selected={!!selected?.includes(m.id)}
+          onToggleSelect={toggleSelect}
         />,
       );
       prev = m;
@@ -325,46 +394,23 @@ export function Conversation({
       }}
     >
       {isMobile ? (
-        <header className="conv-head">
-          <button className="glass-circle" onClick={goBack} aria-label={t("common.back")}>
-            <Icon name="back" size={22} className="flip-rtl" />
+        <header className="conv-head m-conv-head">
+          <button className="m-back" onClick={goBack} aria-label={t("common.back")}>
+            <Icon name="back" size={21} className="flip-rtl" stroke={1.8} />
           </button>
           <button className="who" onClick={openInfo}>
+            <div className="title">{title}</div>
+            {status && <div className={`status${statusOn ? " on" : ""}`}>{status}</div>}
+          </button>
+          <button className="m-head-avatar" onClick={openInfo} aria-label={t("chat.info")}>
             <Avatar
               id={chat.saved ? -1 : (chat.peer?.id ?? chat.id)}
               name={title}
               media={chat.saved ? undefined : (chat.peer?.avatar ?? chat.avatar)}
-              size={42}
+              size={44}
               online={chat.type === "direct" && !chat.saved && chat.peer?.online}
               icon={chat.saved ? "bookmark" : undefined}
             />
-            <div style={{ minWidth: 0 }}>
-              <div className="title">{title}</div>
-              {status && <div className={`status${statusOn ? " on" : ""}`}>{status}</div>}
-            </div>
-          </button>
-          {chat.type === "direct" && !chat.saved && config?.callsEnabled && (
-            <>
-              {config.videoCallsEnabled && (
-                <button
-                  className="icon-btn hdr-call"
-                  onClick={() => call(true)}
-                  aria-label={t("call.video")}
-                >
-                  <Icon name="video" size={22} />
-                </button>
-              )}
-              <button
-                className="icon-btn hdr-call"
-                onClick={() => call(false)}
-                aria-label={t("call.voice")}
-              >
-                <Icon name="phone" size={21} />
-              </button>
-            </>
-          )}
-          <button className="icon-btn" onClick={openInfo} aria-label={t("chat.info")}>
-            <Icon name="more-v" size={22} />
           </button>
         </header>
       ) : (
@@ -411,6 +457,58 @@ export function Conversation({
             </button>
           )}
         </header>
+      )}
+      {selected && (
+        <div className="select-bar">
+          <button className="btn btn-sm btn-ghost" onClick={() => setSelected(null)}>
+            {t("common.cancel")}
+          </button>
+          <b>{t("fwd.selected", { n: selected.length })}</b>
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={!selected.length}
+            onClick={() => {
+              const list = (useApp.getState().messages[chat.id] || []).filter((m) =>
+                selected.includes(m.id),
+              );
+              setForwarding(list);
+            }}
+          >
+            <Icon name="share" size={15} />
+            {t("fwd.forward")}
+          </button>
+        </div>
+      )}
+      {!selected && pins && pins.length > 0 && (
+        <button
+          className="pinned-bar"
+          onClick={() => {
+            const p = pins[pinIdx % pins.length];
+            useApp.setState({ jumpTo: { chatId: chat.id, messageId: p.id } });
+            setPinIdx((i) => (i + 1) % pins.length);
+          }}
+        >
+          <span className="pin-rail">
+            {pins.slice(0, 4).map((p, i) => (
+              <i key={p.id} className={i === pinIdx % Math.min(4, pins.length) ? "on" : ""} />
+            ))}
+          </span>
+          <span className="grow">
+            <b>
+              {t("pin.pinned")}
+              {pins.length > 1 && ` ${(pinIdx % pins.length) + 1}/${pins.length}`}
+            </b>
+            <span>
+              {(() => {
+                const p = pins[pinIdx % pins.length];
+                return p.kind === "locked"
+                  ? t("lock.locked")
+                  : p.text || (p.media ? p.media.name || t("chat.file") : "");
+              })()}
+            </span>
+          </span>
+          <Icon name="pin" size={16} />
+        </button>
       )}
       <ChatTopAd chatId={chat.id} />
 
@@ -513,7 +611,26 @@ export function Conversation({
         </div>
       )}
       {menu && (
-        <Menu x={menu.x} y={menu.y} items={menuItems(menu.m)} onClose={() => setMenu(null)} />
+        <Menu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems(menu.m)}
+          onClose={() => setMenu(null)}
+          header={
+            menu.m.kind !== "system" && menu.m.id > 0 ? (
+              <ReactionBar m={menu.m} onDone={() => setMenu(null)} />
+            ) : undefined
+          }
+        />
+      )}
+      {forwarding && (
+        <ForwardModal
+          messages={forwarding}
+          onClose={() => {
+            setForwarding(null);
+            setSelected(null);
+          }}
+        />
       )}
       {viewer && <MediaViewer message={viewer} onClose={() => setViewer(null)} />}
     </section>

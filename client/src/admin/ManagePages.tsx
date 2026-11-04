@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { del, get, patch, post } from "../api";
 import { Icon } from "../components/Icon";
 import { Avatar, Modal, SearchField, useDebounced } from "../components/ui";
-import { listStamp, num, presenceText } from "../format";
+import { fileSize, listStamp, num, presenceText } from "../format";
 import { errorText } from "../i18n";
 import { useApp } from "../store";
 import type { User } from "../types";
 import { useL } from "./l10n";
 
-type AdminUser = User & { messages: number };
+/** quotaMB: -1 = the server default, 0 = no limit. */
+type AdminUser = User & { messages: number; quotaMB: number; usedBytes: number };
 
 export function UsersPage() {
   const L = useL();
@@ -78,6 +79,7 @@ export function UsersPage() {
               <th>{L("کاربر", "User")}</th>
               <th>{L("وضعیت", "Status")}</th>
               <th>{L("پیام‌ها", "Messages")}</th>
+              <th>{L("فضا", "Storage")}</th>
               <th>{L("عضویت", "Joined")}</th>
               <th />
             </tr>
@@ -113,6 +115,35 @@ export function UsersPage() {
                   {presenceText({ ...u, lastSeenHidden: false }, lang)}
                 </td>
                 <td>{num(u.messages, lang)}</td>
+                <td style={{ whiteSpace: "nowrap", fontSize: 13 }}>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    title={L("تعیین سهمیه", "Set quota")}
+                    onClick={() => {
+                      const v = prompt(
+                        L(
+                          `سهمیه‌ی @${u.username} به مگابایت (خالی = پیش‌فرض سرور، ۰ = بی‌سقف)`,
+                          `Quota for @${u.username} in MB (empty = server default, 0 = no limit)`,
+                        ),
+                        u.quotaMB >= 0 ? String(u.quotaMB) : "",
+                      );
+                      if (v === null) return;
+                      const n = v.trim() === "" ? -1 : Math.max(0, Math.round(Number(v)));
+                      if (Number.isNaN(n)) return;
+                      act(() => patch(`/api/admin/users/${u.id}`, { quotaMB: n }));
+                    }}
+                  >
+                    {fileSize(u.usedBytes, lang)}
+                    <span style={{ color: "var(--text-2)" }}>
+                      {" / "}
+                      {u.quotaMB < 0
+                        ? L("پیش‌فرض", "default")
+                        : u.quotaMB === 0
+                          ? "∞"
+                          : fileSize(u.quotaMB * 1024 * 1024, lang)}
+                    </span>
+                  </button>
+                </td>
                 <td style={{ whiteSpace: "nowrap", fontSize: 13 }}>
                   {listStamp(u.createdAt, lang)}
                 </td>

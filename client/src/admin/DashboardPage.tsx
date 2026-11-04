@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { adHref, adsFor, adTarget } from "../ads";
-import { get, getToken } from "../api";
+import { get, getToken, post } from "../api";
 import { Icon } from "../components/Icon";
 import { fileSize, num } from "../format";
+import { Avatar } from "../components/ui";
 import { useApp } from "../store";
 import { useL } from "./l10n";
 
@@ -24,6 +25,8 @@ interface Stats {
   online: number;
   activeCalls: number;
   dbBytes: number;
+  diskFree?: number;
+  diskLow?: boolean;
   series: { day: string; messages: number; signups: number }[];
 }
 
@@ -154,6 +157,15 @@ export function DashboardPage() {
           "Live status of your server. Message contents are never shown in the admin panel.",
         )}
       </p>
+      {s.diskLow && (
+        <div className="disk-alert" role="alert">
+          <Icon name="alert" size={18} />
+          {L(
+            `فضای خالی دیسک فقط ${fileSize(s.diskFree || 0, lang)} است. آپلود فایل متوقف شده ولی پیام و تماس کار می‌کنند. فایل‌های قدیمی را پاک کنید یا قانون نگه‌داری را سخت‌تر کنید.`,
+            `Only ${fileSize(s.diskFree || 0, lang)} of disk is free. File uploads are paused; messages and calls still work. Clean up old files or tighten the retention rules.`,
+          )}
+        </div>
+      )}
       <AdminAd />
       <div className="stat-grid">
         {tiles.map((t) => (
@@ -175,7 +187,156 @@ export function DashboardPage() {
         label={L("ثبت‌نام‌ها در ۱۴ روز اخیر", "Sign-ups, last 14 days")}
         data={s.series.map((d) => ({ day: d.day, value: d.signups }))}
       />
+      <StorageCard />
     </>
+  );
+}
+
+interface StorageInfo {
+  diskTotal?: number;
+  diskFree?: number;
+  diskLow?: boolean;
+  minFreeMB: number;
+  mediaBytes: number;
+  byKind: { kind: string; files: number; bytes: number }[];
+  topUsers: {
+    id: number;
+    username: string;
+    displayName: string;
+    avatar: string;
+    files: number;
+    bytes: number;
+    quotaMB: number;
+  }[];
+  growth: { day: string; bytes: number }[];
+  daysLeft: number;
+  expiringFiles: number;
+  expiringBytes: number;
+  userQuotaMB: number;
+}
+
+const kindName = (k: string, L: (fa: string, en: string) => string) =>
+  ({
+    image: L("عکس", "Photos"),
+    video: L("ویدیو", "Videos"),
+    file: L("فایل", "Files"),
+    voice: L("پیام صوتی", "Voice notes"),
+    audio: L("صدا", "Audio"),
+  })[k] || k;
+
+/** Disk, what fills it, who fills it, how fast, and a button to apply the rules right now. */
+function StorageCard() {
+  const L = useL();
+  const lang = useApp((s) => s.lang);
+  const [d, setD] = useState<StorageInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () =>
+    get<StorageInfo>("/api/admin/storage")
+      .then(setD)
+      .catch(() => {});
+  useEffect(() => {
+    load();
+  }, []);
+  if (!d) return null;
+  const n = (v: number) => num(v, lang);
+  const used = d.diskTotal && d.diskFree !== undefined ? d.diskTotal - d.diskFree : 0;
+  const cleanup = async () => {
+    setBusy(true);
+    try {
+      const r = await post<{ files: number; bytes: number }>("/api/admin/storage/cleanup");
+      useApp
+        .getState()
+        .toast(
+          L(
+            `${n(r.files)} فایل و ${fileSize(r.bytes, lang)} پاک شد`,
+            `Removed ${n(r.files)} files (${fileSize(r.bytes, lang)})`,
+          ),
+        );
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const maxKind = Math.max(1, ...d.byKind.map((k) => k.bytes));
+  return (
+    <div className="chart-card storage-card">
+      <div className="sc-head">
+        <h3>{L("فضای سرور", "Server storage")}</h3>
+        <button className="btn btn-sm" onClick={cleanup} disabled={busy}>
+          {busy ? <span className="spinner" /> : <Icon name="trash" size={15} />}
+          {L("همین الان پاک‌سازی کن", "Clean up now")}
+        </button>
+      </div>
+      {d.diskTotal ? (
+        <>
+          <div className={`sc-disk${d.diskLow ? " low" : ""}`}>
+            <i style={{ width: `${(used / d.diskTotal) * 100}%` }} />
+            <b
+              style={{ insetInlineEnd: `${((d.minFreeMB * 1048576) / d.diskTotal) * 100}%` }}
+              title={L("حد امن", "Safe minimum")}
+            />
+          </div>
+          <div className="sc-line">
+            {L(
+              `${fileSize(d.diskFree || 0, lang)} خالی از ${fileSize(d.diskTotal, lang)} · رسانه‌ها ${fileSize(d.mediaBytes, lang)}`,
+              `${fileSize(d.diskFree || 0, lang)} free of ${fileSize(d.diskTotal, lang)} · media ${fileSize(d.mediaBytes, lang)}`,
+            )}
+            {d.daysLeft >= 0 && (
+              <b>
+                {" · "}
+                {L(
+                  `با این سرعت دیسک حدود ${n(d.daysLeft)} روز دیگر پر می‌شود`,
+                  `at this pace the disk is full in about ${n(d.daysLeft)} days`,
+                )}
+              </b>
+            )}
+          </div>
+        </>
+      ) : null}
+      {d.expiringFiles > 0 && (
+        <div className="sc-line muted">
+          {L(
+            `${n(d.expiringFiles)} فایل (${fileSize(d.expiringBytes, lang)}) در ۷ روز آینده منقضی می‌شود`,
+            `${n(d.expiringFiles)} files (${fileSize(d.expiringBytes, lang)}) expire in the next 7 days`,
+          )}
+        </div>
+      )}
+      <div className="sc-cols">
+        <div>
+          <h4>{L("بر اساس نوع", "By type")}</h4>
+          {d.byKind.map((k) => (
+            <div className="sc-row" key={k.kind}>
+              <span className="grow">{kindName(k.kind, L)}</span>
+              <span className="muted">{n(k.files)}</span>
+              <span className="sc-meter">
+                <i style={{ width: `${(k.bytes / maxKind) * 100}%` }} />
+              </span>
+              <b>{fileSize(k.bytes, lang)}</b>
+            </div>
+          ))}
+        </div>
+        <div>
+          <h4>{L("پرمصرف‌ترین کاربران", "Top users")}</h4>
+          {d.topUsers.map((u) => {
+            const q = u.quotaMB < 0 ? d.userQuotaMB : u.quotaMB;
+            return (
+              <div className="sc-row" key={u.id}>
+                <Avatar id={u.id} name={u.displayName} media={u.avatar} size={26} />
+                <span className="grow">
+                  {u.displayName} <span className="muted ltr">@{u.username}</span>
+                </span>
+                <b>{fileSize(u.bytes, lang)}</b>
+                {q > 0 && <span className="muted">/ {fileSize(q * 1048576, lang)}</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <Bars
+        label={L("حجم آپلود در ۳۰ روز اخیر (مگابایت)", "Uploads, last 30 days (MB)")}
+        data={d.growth.map((g) => ({ day: g.day, value: Math.round(g.bytes / 1048576) }))}
+      />
+    </div>
   );
 }
 

@@ -7,6 +7,7 @@ import { useApp } from "../store";
 import type { Chat, Message } from "../types";
 import { wsSend } from "../ws";
 import { useMedia } from "./hooks";
+import { LockComposer } from "./LockComposer";
 import { MediaPreview, useStaged } from "./MediaPreview";
 
 const EMOJI =
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
+  const [locking, setLocking] = useState(false);
   const t = useT();
   const lang = useApp((s) => s.lang);
   const config = useApp((s) => s.config);
@@ -103,12 +105,18 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
   const sendFiles = (files: FileList | File[]) => useStaged.getState().add(chat.id, files);
 
   // Like Telegram: the reply goes on the first file, the caption under the last one.
-  const sendStaged = (list: File[], caption: string) => {
+  const sendStaged = (
+    list: File[],
+    caption: string,
+    opts: { original: boolean; once: boolean },
+  ) => {
     typing("uploading");
     list.forEach((f, i) =>
       useApp.getState().sendFile(chat.id, f, {
         replyTo: i === 0 ? replyTo : null,
         caption: i === list.length - 1 ? caption : undefined,
+        original: opts.original && f.type.startsWith("image/"),
+        once: opts.once,
       }),
     );
     if (caption && caption === text.trim()) {
@@ -296,12 +304,19 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
               aria-label={t("chat.send")}
             >
               <Icon name={editing ? "check" : "plane"} size={19} filled={!editing} stroke={2.4} />
+              <span className="send-label">{t(editing ? "common.save" : "chat.send")}</span>
             </button>
           </div>
         )}
       </div>
+      {locking && <LockComposer chat={chat} onClose={() => setLocking(false)} />}
       {stagedFor === chat.id && (
-        <MediaPreview chatId={chat.id} initialCaption={text.trim()} onSend={sendStaged} />
+        <MediaPreview
+          chatId={chat.id}
+          initialCaption={text.trim()}
+          onSend={sendStaged}
+          allowOnce={chat.type === "direct" && !chat.saved}
+        />
       )}
       {attachMenu && (
         <Menu
@@ -311,6 +326,7 @@ export function Composer({ chat, replyTo, editing, onCancel, onSent }: Props) {
           items={[
             { icon: "image", label: t("chat.photoVideo"), onClick: () => pick("image/*,video/*") },
             { icon: "file", label: t("chat.file"), onClick: () => pick("*/*") },
+            { icon: "lock", label: t("lock.new"), onClick: () => setLocking(true) },
           ]}
         />
       )}

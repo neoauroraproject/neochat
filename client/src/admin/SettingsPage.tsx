@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { get, mediaUrl, put, upload } from "../api";
+import { get, mediaUrl, post, put, upload } from "../api";
 import { Icon } from "../components/Icon";
 import { Toggle, pickFile } from "../components/ui";
+import { fileSize, num as fmtNum } from "../format";
 import { errorText } from "../i18n";
 import { useApp } from "../store";
 import type { PublicConfig } from "../types";
@@ -27,6 +28,11 @@ interface Settings {
   maxMessageLen: number;
   maxGroupMembers: number;
   mediaRetentionDays: number;
+  largeFileMB: number;
+  largeFileDays: number;
+  userQuotaMB: number;
+  quotaMode: "block" | "oldest";
+  minFreeDiskMB: number;
   messageRetentionDays: number;
   clientCacheMessages: number;
   mediaCacheDays: number;
@@ -94,9 +100,32 @@ export function SettingsPage({ section }: { section: "branding" | "access" | "li
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
   const dirty = JSON.stringify(s) !== JSON.stringify(orig);
 
+  const rulesChanged =
+    s.largeFileMB !== orig.largeFileMB ||
+    s.largeFileDays !== orig.largeFileDays ||
+    s.mediaRetentionDays !== orig.mediaRetentionDays;
+
   const save = async () => {
     setBusy(true);
     try {
+      // New retention rules also reach the files already on the server: show what goes first.
+      if (rulesChanged) {
+        const p = await post<{ files: number; bytes: number }>("/api/admin/storage/preview", {
+          largeFileMB: s.largeFileMB,
+          largeFileDays: s.largeFileDays,
+          mediaRetentionDays: s.mediaRetentionDays,
+        });
+        if (
+          p.files > 0 &&
+          !confirm(
+            L(
+              `با این قانون ${fmtNum(p.files, lang)} فایل و ${fileSize(p.bytes, lang)} همین حالا از سرور پاک می‌شود. ادامه می‌دهید؟`,
+              `These rules remove ${fmtNum(p.files, lang)} files (${fileSize(p.bytes, lang)}) from the server right away. Continue?`,
+            ),
+          )
+        )
+          return;
+      }
       const v = await put<Settings>("/api/admin/settings", s);
       setOrig(v);
       setS(v);
@@ -153,7 +182,7 @@ export function SettingsPage({ section }: { section: "branding" | "access" | "li
             const f = await pickFile("image/png,image/jpeg,image/webp,image/gif");
             if (!f) return;
             try {
-              set(k, (await upload(f)).id);
+              set(k, (await upload(f, { kind: "avatar" })).id);
             } catch (e) {
               useApp.getState().toast(errorText(lang, e), "error");
             }
@@ -397,21 +426,72 @@ export function SettingsPage({ section }: { section: "branding" | "access" | "li
           </Section>
           <Section
             icon="database"
-            title={L("نگهداری داده", "Retention")}
+            title={L("نگه‌داری فایل‌ها", "File retention")}
             desc={L(
-              "۰ یعنی برای همیشه نگه داشته شود. پاکسازی هر ساعت انجام می‌شود.",
-              "0 keeps data forever. Cleanup runs hourly.",
+              "فایل‌های بزرگ زودتر پاک می‌شوند. تاریخ انقضای هر فایل لحظه‌ی آپلود ثبت می‌شود و کاربر آن را می‌بیند. ۰ یعنی همیشه. پاک‌سازی هر ساعت انجام می‌شود؛ پیام فایلِ منقضی‌شده در چت می‌ماند.",
+              "Large files leave sooner. Each file's expiry is fixed at upload and shown to users. 0 means forever. Cleanup runs hourly; the message of an expired file stays in the chat.",
             )}
           >
             <div className="form-grid">
               {num(
-                "messageRetentionDays",
-                L("حذف پیام‌های قدیمی‌تر از (روز)", "Delete messages older than (days)"),
+                "largeFileMB",
+                L("فایل بزرگ یعنی بالای (مگابایت)", "A large file is over (MB)"),
+                undefined,
+                1,
               )}
+              {num("largeFileDays", L("نگه‌داری فایل‌های بزرگ (روز)", "Keep large files (days)"))}
               {num(
                 "mediaRetentionDays",
-                L("حذف رسانه‌های قدیمی‌تر از (روز)", "Delete media older than (days)"),
+                L("نگه‌داری بقیه‌ی فایل‌ها (روز)", "Keep other files (days)"),
               )}
+              {num(
+                "messageRetentionDays",
+                L("حذف پیام‌های متنی قدیمی‌تر از (روز)", "Delete text messages older than (days)"),
+              )}
+            </div>
+          </Section>
+          <Section
+            icon="users"
+            title={L("سهمیه‌ی کاربران", "User quotas")}
+            desc={L(
+              "فضای هر کاربر روی سرور. عکس پروفایل، تبلیغ و برند حساب نمی‌شوند. برای هر کاربر عدد جدا را در صفحه‌ی کاربران بگذارید.",
+              "Space each user may take on the server. Profile photos, ads and branding don't count. Set a different number per user on the Users page.",
+            )}
+          >
+            <div className="form-grid">
+              {num(
+                "userQuotaMB",
+                L("سهمیه‌ی پیش‌فرض (مگابایت)", "Default quota (MB)"),
+                L("۰ = بی‌سقف", "0 = no limit"),
+              )}
+              <div className="field">
+                <label>{L("وقتی سهمیه پر شد", "When a quota is full")}</label>
+                <select
+                  className="select"
+                  value={s.quotaMode}
+                  onChange={(e) => set("quotaMode", e.target.value as Settings["quotaMode"])}
+                >
+                  <option value="block">{L("جلوی ارسال گرفته شود", "Block new uploads")}</option>
+                  <option value="oldest">
+                    {L(
+                      "قدیمی‌ترین فایل‌های همان کاربر پاک شوند",
+                      "Remove that user's oldest files",
+                    )}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </Section>
+          <Section
+            icon="server"
+            title={L("محافظ دیسک", "Disk guard")}
+            desc={L(
+              "وقتی فضای خالی دیسک از این کمتر شود آپلود متوقف می‌شود ولی پیام متنی و تماس کار می‌کنند، تا پایگاه‌داده هیچ‌وقت با پر شدن دیسک از کار نیفتد.",
+              "Below this much free disk, uploads stop while text messages and calls keep working, so the database never fails on a full disk.",
+            )}
+          >
+            <div className="form-grid">
+              {num("minFreeDiskMB", L("حداقل فضای خالی (مگابایت)", "Minimum free space (MB)"))}
             </div>
           </Section>
           <Section

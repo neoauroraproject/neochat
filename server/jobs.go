@@ -28,12 +28,12 @@ func (s *Server) housekeeping() {
 		}
 	}
 
-	// Media past retention is dropped from messages (they keep their text) before being collected below.
-	if st.MediaRetentionDays > 0 {
-		cutoff := now.AddDate(0, 0, -st.MediaRetentionDays).UnixMilli()
-		s.db.Exec(`UPDATE messages SET media_id='' WHERE media_id IN (SELECT id FROM media WHERE created_at<?)
-			AND media_id NOT IN (SELECT avatar FROM users UNION SELECT avatar FROM chats UNION SELECT image FROM ads)`, cutoff)
-		s.db.Exec(`DELETE FROM messages WHERE media_id='' AND text='' AND kind IN ('image','video','file','audio','voice')`)
+	// Files past their expiry lose their bytes; the messages stay and say the file expired.
+	s.expireMedia()
+	if st.QuotaMode == "oldest" {
+		for _, uid := range s.usersOverQuota() {
+			s.makeRoom(uid, "")
+		}
 	}
 
 	// Collect media nobody references anymore (after a grace period for in-progress sends).
@@ -60,6 +60,8 @@ func (s *Server) housekeeping() {
 			log.Printf("storage: removed %d unreferenced media files", len(ids))
 		}
 	}
+
+	s.pruneEvents()
 
 	idle := now.AddDate(0, 0, -st.SessionDays).UnixMilli()
 	s.db.Exec(`DELETE FROM sessions WHERE last_used<?`, idle)

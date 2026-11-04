@@ -30,7 +30,7 @@ export function NewRoomModal({
     const f = await pickFile("image/*");
     if (!f) return;
     try {
-      setAvatar((await upload(f)).id);
+      setAvatar((await upload(f, { kind: "avatar" })).id);
     } catch (e) {
       setError(errorText(lang, e));
     }

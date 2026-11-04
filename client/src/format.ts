@@ -97,7 +97,28 @@ export function systemText(m: Message, lang: Lang) {
       removed: "sys.removed",
     } as const
   )[ev as "created"];
+  if (ev === "ttl") {
+    const sec = Number(m.text.split(":")[1]) || 0;
+    return sec
+      ? translate(lang, "sys.ttlOn", { name, time: ttlLabel(sec, lang) })
+      : translate(lang, "sys.ttlOff", { name });
+  }
   return key ? translate(lang, key, { name }) : m.text;
+}
+
+/** "30 seconds", "1 hour", "1 week" for the self-destruct timer. */
+export function ttlLabel(sec: number, lang: Lang) {
+  const k =
+    sec >= 604800
+      ? "ttl.week"
+      : sec >= 86400
+        ? "ttl.day"
+        : sec >= 3600
+          ? "ttl.hour"
+          : sec >= 60
+            ? "ttl.minute"
+            : "ttl.seconds";
+  return translate(lang, k, { n: sec });
 }
 
 export function callInfo(m: Message): { status: string; video: boolean; duration: number } {
@@ -112,7 +133,10 @@ export function callInfo(m: Message): { status: string; video: boolean; duration
 export function preview(m: Message | undefined, lang: Lang, meId?: number): string {
   if (!m) return "";
   const t = (k: Parameters<typeof translate>[1]) => translate(lang, k);
+  if (m.once) return `⏱ ${t(m.media?.kind === "video" ? "once.video" : "once.photo")}`;
   switch (m.kind) {
+    case "locked":
+      return `🔒 ${t("lock.locked")}`;
     case "system":
       return systemText(m, lang);
     case "call": {
@@ -148,4 +172,24 @@ export function initials(name: string) {
   const first = [...parts[0]][0] || "";
   const second = parts.length > 1 ? [...parts[1]][0] || "" : "";
   return (first + second).toUpperCase();
+}
+
+/** A calendar date like "14 Azar" (the Persian calendar in Persian), with the year when it differs. */
+export function dateOf(ts: number, lang: Lang) {
+  const d = new Date(ts);
+  const opts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return new Intl.DateTimeFormat(locale(lang), opts).format(d);
+}
+
+/** When a file of this size, sent now, leaves the server under the admin's rules (0 = never). */
+export function expiryFor(
+  size: number,
+  cfg: { largeFileMB?: number; largeFileDays?: number; mediaRetentionDays?: number } | null,
+  from = Date.now(),
+) {
+  if (!cfg) return 0;
+  const large = !!cfg.largeFileMB && size > cfg.largeFileMB * 1024 * 1024;
+  const days = large ? cfg.largeFileDays || 0 : cfg.mediaRetentionDays || 0;
+  return days > 0 ? from + days * 86_400_000 : 0;
 }

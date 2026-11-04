@@ -35,11 +35,17 @@ type Settings struct {
 	MaxMessageLen   int `json:"maxMessageLen"`
 	MaxGroupMembers int `json:"maxGroupMembers"`
 
-	// Storage & cache
-	MediaRetentionDays   int `json:"mediaRetentionDays"`
-	MessageRetentionDays int `json:"messageRetentionDays"`
-	ClientCacheMessages  int `json:"clientCacheMessages"`
-	MediaCacheDays       int `json:"mediaCacheDays"`
+	// Storage & cache. Files bigger than LargeFileMB stay LargeFileDays, the rest MediaRetentionDays
+	// (0 = forever). Each file's expiry is fixed when it is uploaded.
+	LargeFileMB          int    `json:"largeFileMB"`
+	LargeFileDays        int    `json:"largeFileDays"`
+	MediaRetentionDays   int    `json:"mediaRetentionDays"`
+	UserQuotaMB          int    `json:"userQuotaMB"` // default per user; 0 = no limit
+	QuotaMode            string `json:"quotaMode"`   // block | oldest
+	MinFreeDiskMB        int    `json:"minFreeDiskMB"`
+	MessageRetentionDays int    `json:"messageRetentionDays"`
+	ClientCacheMessages  int    `json:"clientCacheMessages"`
+	MediaCacheDays       int    `json:"mediaCacheDays"`
 
 	// Calls & network
 	CallsEnabled      bool     `json:"callsEnabled"`
@@ -49,6 +55,9 @@ type Settings struct {
 	TurnPort          int      `json:"turnPort"`
 	ExtraICEServers   []string `json:"extraIceServers"`
 	CallRingSeconds   int      `json:"callRingSeconds"`
+
+	// Reactions people may put on messages.
+	ReactionEmojis []string `json:"reactionEmojis"`
 
 	// Advertising
 	AdsEnabled      bool `json:"adsEnabled"`
@@ -73,7 +82,12 @@ func defaultSettings() Settings {
 		MaxFileMB:            50,
 		MaxMessageLen:        4096,
 		MaxGroupMembers:      2000,
-		MediaRetentionDays:   0,
+		LargeFileMB:          20,
+		LargeFileDays:        30,
+		MediaRetentionDays:   365,
+		UserQuotaMB:          2048,
+		QuotaMode:            "block",
+		MinFreeDiskMB:        2048,
 		MessageRetentionDays: 0,
 		ClientCacheMessages:  200,
 		MediaCacheDays:       30,
@@ -82,6 +96,7 @@ func defaultSettings() Settings {
 		TurnEnabled:          true,
 		TurnPort:             3478,
 		CallRingSeconds:      45,
+		ReactionEmojis:       []string{"👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "👏"},
 		AdsEnabled:           true,
 		AdsChannelEvery:      20,
 	}
@@ -128,6 +143,13 @@ func (st *Settings) normalize() {
 	clamp(&st.MaxMessageLen, 100, 65536)
 	clamp(&st.MaxGroupMembers, 2, 1000000)
 	clamp(&st.MediaRetentionDays, 0, 36500)
+	clamp(&st.LargeFileMB, 1, 1<<20)
+	clamp(&st.LargeFileDays, 0, 36500)
+	clamp(&st.UserQuotaMB, 0, 1<<30)
+	clamp(&st.MinFreeDiskMB, 0, 1<<30)
+	if st.QuotaMode != "block" && st.QuotaMode != "oldest" {
+		st.QuotaMode = d.QuotaMode
+	}
 	clamp(&st.MessageRetentionDays, 0, 36500)
 	clamp(&st.ClientCacheMessages, 0, 5000)
 	clamp(&st.MediaCacheDays, 0, 3650)
@@ -143,6 +165,19 @@ func (st *Settings) normalize() {
 		}
 	}
 	st.ExtraICEServers = ice
+	var emojis []string
+	seen := map[string]bool{}
+	for _, e := range st.ReactionEmojis {
+		e = strings.TrimSpace(e)
+		if e != "" && len(e) <= 32 && !seen[e] && len(emojis) < 16 {
+			seen[e] = true
+			emojis = append(emojis, e)
+		}
+	}
+	if len(emojis) == 0 {
+		emojis = d.ReactionEmojis
+	}
+	st.ReactionEmojis = emojis
 }
 
 func (s *Server) cfg() Settings { return *s.settings.Load() }
@@ -214,9 +249,13 @@ func (s *Server) publicConfig() map[string]any {
 		"maxMessageLen":       st.MaxMessageLen,
 		"clientCacheMessages": st.ClientCacheMessages,
 		"mediaCacheDays":      st.MediaCacheDays,
+		"largeFileMB":         st.LargeFileMB,
+		"largeFileDays":       st.LargeFileDays,
+		"mediaRetentionDays":  st.MediaRetentionDays,
 		"callsEnabled":        st.CallsEnabled,
 		"videoCallsEnabled":   st.VideoCallsEnabled,
 		"adsEnabled":          st.AdsEnabled,
+		"reactionEmojis":      st.ReactionEmojis,
 		"adsChannelEvery":     st.AdsChannelEvery,
 		"setupRequired":       s.setupRequired(),
 		"version":             version,

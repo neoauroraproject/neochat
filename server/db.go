@@ -155,6 +155,68 @@ CREATE TABLE push_subscriptions (
 CREATE INDEX idx_push_user ON push_subscriptions(user_id);
 CREATE INDEX idx_push_session ON push_subscriptions(session_id);
 `,
+	// Storage rules: each file carries its own expiry (decided at upload by its size), a file whose
+	// bytes were removed keeps its row so the message still shows its name and size, profile and
+	// brand images are kept out of expiry and quotas, and each user may get their own quota.
+	`
+ALTER TABLE media ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE media ADD COLUMN removed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE media ADD COLUMN keep INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_media_owner ON media(owner_id);
+CREATE INDEX idx_media_expires ON media(expires_at) WHERE expires_at > 0 AND removed = 0;
+ALTER TABLE users ADD COLUMN quota_mb INTEGER NOT NULL DEFAULT -1;
+
+UPDATE media SET keep = 1 WHERE id IN (
+	SELECT avatar FROM users WHERE avatar <> ''
+	UNION SELECT avatar FROM chats WHERE avatar <> ''
+	UNION SELECT image FROM ads WHERE image <> ''
+	UNION SELECT json_extract(value, '$.logoMedia') FROM settings WHERE key = 'settings'
+	UNION SELECT json_extract(value, '$.backgroundMedia') FROM settings WHERE key = 'settings');
+
+-- Servers that already had a media retention keep it for their existing files.
+UPDATE media SET expires_at = created_at + 86400000 *
+	(SELECT CAST(json_extract(value, '$.mediaRetentionDays') AS INTEGER) FROM settings WHERE key = 'settings')
+WHERE keep = 0 AND COALESCE(
+	(SELECT CAST(json_extract(value, '$.mediaRetentionDays') AS INTEGER) FROM settings WHERE key = 'settings'), 0) > 0;
+`,
+	// Offline sync, reactions, pins, forwarding and messages that destroy themselves or open once.
+	`
+CREATE TABLE events (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	chat_id    INTEGER NOT NULL,
+	kind       TEXT NOT NULL,
+	message_id INTEGER NOT NULL DEFAULT 0,
+	user_id    INTEGER NOT NULL DEFAULT 0,
+	data       TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_events_chat ON events(chat_id, id);
+CREATE INDEX idx_events_created ON events(created_at);
+
+ALTER TABLE messages ADD COLUMN client_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX idx_messages_client ON messages(sender_id, client_id) WHERE client_id <> '';
+ALTER TABLE messages ADD COLUMN ttl INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE messages ADD COLUMN destroy_at INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_messages_destroy ON messages(destroy_at) WHERE destroy_at > 0;
+ALTER TABLE messages ADD COLUMN once INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE messages ADD COLUMN fwd_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE chats ADD COLUMN ttl_seconds INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE reactions (
+	message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+	user_id    INTEGER NOT NULL,
+	emoji      TEXT NOT NULL,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (message_id, user_id)
+);
+CREATE TABLE pins (
+	chat_id    INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+	message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+	pinned_by  INTEGER NOT NULL,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (chat_id, message_id)
+);
+`,
 }
 
 func openDB(dataDir string) (*sql.DB, error) {

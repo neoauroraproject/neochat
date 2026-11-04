@@ -35,13 +35,30 @@ type Message struct {
 	EditedAt  int64          `json:"editedAt,omitempty"`
 	CreatedAt int64          `json:"createdAt"`
 	ClientID  string         `json:"clientId,omitempty"`
+	// TTL (seconds) makes the message destroy itself that long after the recipient saw it;
+	// DestroyAt is when that happens once the countdown started.
+	TTL       int   `json:"ttl,omitempty"`
+	DestroyAt int64 `json:"destroyAt,omitempty"`
+	// Once: 1 = a view-once photo/video not opened yet, 2 = opened (the file is gone).
+	Once      int             `json:"once,omitempty"`
+	FwdName   string          `json:"fwdName,omitempty"`
+	Reactions []ReactionGroup `json:"reactions,omitempty"`
+}
+
+// msgOpts are the optional parts of a new message.
+type msgOpts struct {
+	clientID string
+	ttl      int
+	once     bool
+	fwdName  string
 }
 
 const messageSelect = `
 SELECT m.id, m.chat_id, m.sender_id, m.kind, m.text, m.media_id, m.reply_to, m.edited_at, m.created_at,
+	m.ttl, m.destroy_at, m.once, m.fwd_name,
 	u.username, u.display_name, u.avatar,
 	COALESCE(md.kind,''), COALESCE(md.mime,''), COALESCE(md.name,''), COALESCE(md.size,0),
-	COALESCE(md.width,0), COALESCE(md.height,0), COALESCE(md.has_thumb,0),
+	COALESCE(md.width,0), COALESCE(md.height,0), COALESCE(md.has_thumb,0), COALESCE(md.expires_at,0), COALESCE(md.removed,0),
 	COALESCE(r.id,0), COALESCE(r.kind,''), COALESCE(r.text,''), COALESCE(ru.display_name,'')
 FROM messages m
 JOIN users u ON u.id=m.sender_id
@@ -54,18 +71,22 @@ func scanMessage(sc scanner) (*Message, error) {
 	var snd MessageSender
 	var mediaID string
 	var md Media
-	var hasThumb int
+	var hasThumb, removed int
 	var rp ReplyPreview
 	if err := sc.Scan(&m.ID, &m.ChatID, &m.SenderID, &m.Kind, &m.Text, &mediaID, &m.ReplyTo, &m.EditedAt, &m.CreatedAt,
+		&m.TTL, &m.DestroyAt, &m.Once, &m.FwdName,
 		&snd.Username, &snd.DisplayName, &snd.Avatar,
-		&md.Kind, &md.Mime, &md.Name, &md.Size, &md.Width, &md.Height, &hasThumb,
+		&md.Kind, &md.Mime, &md.Name, &md.Size, &md.Width, &md.Height, &hasThumb, &md.ExpiresAt, &removed,
 		&rp.ID, &rp.Kind, &rp.Text, &rp.SenderName); err != nil {
 		return nil, err
 	}
 	snd.ID = m.SenderID
 	m.Sender = &snd
-	if mediaID != "" && md.Kind != "" {
-		md.ID, md.HasThumb = mediaID, hasThumb == 1
+	if mediaID != "" && md.Kind != "" && m.Once != 2 {
+		md.ID, md.HasThumb, md.Expired = mediaID, hasThumb == 1, removed == 1
+		if m.Once == 1 {
+			md.HasThumb = false // a view-once photo has no preview
+		}
 		m.Media = &md
 	}
 	if rp.ID > 0 {
@@ -79,6 +100,9 @@ func (s *Server) messageByID(id int64) (*Message, error) {
 	m, err := scanMessage(s.db.QueryRow(messageSelect+` WHERE m.id=?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errNotFound
+	}
+	if err == nil {
+		s.attachReactions([]*Message{m})
 	}
 	return m, err
 }
@@ -115,6 +139,7 @@ func (s *Server) handleListMessages(w http.ResponseWriter, r *http.Request, u *U
 		}
 		list = append(list, m)
 	}
+	s.attachReactions(list)
 	if after == 0 {
 		// return oldest → newest
 		for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
@@ -127,14 +152,19 @@ func (s *Server) handleListMessages(w http.ResponseWriter, r *http.Request, u *U
 
 // insertMessage stores a message, bumps the chat and fans it out to every member.
 func (s *Server) insertMessage(chatID, senderID int64, kind, text, mediaID string, replyTo int64, clientID string) (*Message, error) {
+	return s.insertMessageOpts(chatID, senderID, kind, text, mediaID, replyTo, msgOpts{clientID: clientID})
+}
+
+func (s *Server) insertMessageOpts(chatID, senderID int64, kind, text, mediaID string, replyTo int64, o msgOpts) (*Message, error) {
+	clientID := o.clientID
 	ts := nowMs()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	res, err := tx.Exec(`INSERT INTO messages(chat_id, sender_id, kind, text, media_id, reply_to, created_at) VALUES(?,?,?,?,?,?,?)`,
-		chatID, senderID, kind, text, mediaID, replyTo, ts)
+	res, err := tx.Exec(`INSERT INTO messages(chat_id, sender_id, kind, text, media_id, reply_to, created_at, client_id, ttl, once, fwd_name) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		chatID, senderID, kind, text, mediaID, replyTo, ts, clientID, o.ttl, boolInt(o.once), o.fwdName)
 	if err != nil {
 		return nil, err
 	}
@@ -191,23 +221,58 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request, u *Us
 		MediaID  string `json:"mediaId"`
 		ReplyTo  int64  `json:"replyTo"`
 		ClientID string `json:"clientId"`
+		// Kind "locked": text is an encrypted envelope only the password opens.
+		Kind string `json:"kind"`
+		// Once: a photo or video that can be opened a single time (private chats only).
+		Once bool `json:"once"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
+	req.ClientID = trimLen(req.ClientID, 64)
+	// A retry from the offline outbox of a message the server already has: answer with it.
+	if req.ClientID != "" {
+		var existing int64
+		if s.db.QueryRow(`SELECT id FROM messages WHERE sender_id=? AND client_id=? AND chat_id=?`, u.ID, req.ClientID, chatID).Scan(&existing) == nil {
+			m, err := s.messageByID(existing)
+			if err != nil {
+				return err
+			}
+			m.ClientID = req.ClientID
+			writeJSON(w, 200, m)
+			return nil
+		}
+	}
 	text := strings.TrimSpace(req.Text)
-	if len([]rune(text)) > st.MaxMessageLen {
+	limit := st.MaxMessageLen
+	if req.Kind == "locked" {
+		limit = st.MaxMessageLen*2 + 512 // the encrypted envelope is larger than the text
+	}
+	if len([]rune(text)) > limit {
 		return errf(400, "too_long", "message is too long")
 	}
 	kind := "text"
+	var md *Media
 	if req.MediaID != "" {
-		md, err := s.mediaByID(req.MediaID)
-		if err != nil || md.OwnerID != u.ID {
+		md, err = s.mediaByID(req.MediaID)
+		if err != nil || md.OwnerID != u.ID || md.Expired {
 			return errf(400, "bad_request", "invalid attachment")
 		}
 		kind = md.Kind
 	} else if text == "" {
 		return errf(400, "bad_request", "message is empty")
+	}
+	if req.Kind == "locked" {
+		if !validLockbox(text) || (md != nil && md.Kind != "file") {
+			return errf(400, "bad_request", "invalid locked message")
+		}
+		kind = "locked"
+	}
+	if req.Once {
+		if typ != "direct" || md == nil || (md.Kind != "image" && md.Kind != "video") {
+			return errf(400, "bad_request", "view-once works for photos and videos in private chats")
+		}
+		s.hideThumb(md.ID)
 	}
 	if req.ReplyTo > 0 {
 		var rc int64
@@ -215,7 +280,8 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request, u *Us
 			req.ReplyTo = 0
 		}
 	}
-	m, err := s.insertMessage(chatID, u.ID, kind, text, req.MediaID, req.ReplyTo, trimLen(req.ClientID, 64))
+	m, err := s.insertMessageOpts(chatID, u.ID, kind, text, req.MediaID, req.ReplyTo,
+		msgOpts{clientID: req.ClientID, ttl: s.chatTTL(chatID), once: req.Once})
 	if err != nil {
 		return err
 	}
@@ -244,7 +310,7 @@ func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request, u *Us
 	if err != nil {
 		return err
 	}
-	if m.SenderID != u.ID || m.Kind == "system" || m.Kind == "call" {
+	if m.SenderID != u.ID || m.Kind == "system" || m.Kind == "call" || m.Kind == "locked" || m.Once > 0 {
 		return errForbidden
 	}
 	var req struct {
@@ -267,8 +333,7 @@ func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request, u *Us
 	if err != nil {
 		return err
 	}
-	ids, _ := s.memberIDs(m.ChatID)
-	s.hub.sendToMany(ids, "message_edit", m)
+	s.broadcastEdit(m)
 	writeJSON(w, 200, m)
 	return nil
 }
@@ -299,6 +364,7 @@ func (s *Server) deleteMessage(chatID, id int64) error {
 		s.db.QueryRow(`SELECT created_at FROM messages WHERE id=?`, lastID).Scan(&lastAt)
 	}
 	s.db.Exec(`UPDATE chats SET last_msg_id=?, last_msg_at=CASE WHEN ?>0 THEN ? ELSE last_msg_at END WHERE id=?`, lastID, lastAt, lastAt, chatID)
+	s.logEvent(chatID, "delete", id, 0, "")
 	ids, _ := s.memberIDs(chatID)
 	s.hub.sendToMany(ids, "message_delete", map[string]int64{"chatId": chatID, "id": id, "lastMessageId": lastID})
 	return nil

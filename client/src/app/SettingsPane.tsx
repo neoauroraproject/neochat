@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { del, get, patch, post, upload } from "../api";
 import { clearAllCaches } from "../cache";
 import { Icon } from "../components/Icon";
+import { AppLockSettings } from "./AppLockSettings";
+import { DataStorage } from "./DataStorage";
+import { ChatAppearance } from "./ChatAppearance";
+import { useMobile } from "./hooks";
+import { RoundButton } from "./MobileHeader";
+import { QrModal } from "./QrModal";
+import { MyStorage } from "./MyStorage";
 import { confirmAction } from "../components/sheet";
 import { Avatar, Modal, Toggle, pickFile } from "../components/ui";
 import { listStamp, num } from "../format";
@@ -61,6 +68,12 @@ export function SettingsPane() {
   const [error, setError] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [lookOpen, setLookOpen] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const isMobile = useMobile();
+  const jump = (id: string) =>
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   const [notify, setNotify] = useState(
     getPref("notify") &&
       typeof Notification !== "undefined" &&
@@ -92,7 +105,7 @@ export function SettingsPane() {
     const f = await pickFile("image/*");
     if (!f) return;
     try {
-      const m = await upload(f);
+      const m = await upload(f, { kind: "avatar" });
       save({ avatar: m.id });
     } catch (e) {
       setError(errorText(lang, e));
@@ -117,82 +130,154 @@ export function SettingsPane() {
 
   return (
     <div className="settings-pane">
-      <LargeTitleScreen title={t("settings.title")} grouped>
+      <LargeTitleScreen title={t("settings.title")} grouped bare={isMobile}>
         <div className="settings-inner">
-          <div className="me-card">
-            <div className="avatar-edit">
-              <Avatar id={me.id} name={me.displayName} media={me.avatar} size={96} />
-              <button
-                className="icon-btn accent"
-                onClick={changePhoto}
-                aria-label={t("settings.changePhoto")}
-              >
-                <Icon name="camera" size={16} />
-              </button>
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{me.displayName}</div>
-              <div className="ltr" style={{ color: "var(--text-2)" }}>
-                @{me.username}
-              </div>
-            </div>
-          </div>
-
-          {error && <div className="form-error">{error}</div>}
-          <div className="section-label">{t("settings.profile")}</div>
-          <div className="card-group form-group">
-            <div className="field">
-              <label>{t("auth.displayName")}</label>
-              <input
-                className="input"
-                value={profile.displayName}
-                onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
-                maxLength={64}
-              />
-            </div>
-            <div className="field">
-              <label>{t("auth.username")}</label>
-              <div className="input-prefix">
-                <span>@</span>
-                <input
-                  className="input ltr"
-                  dir="ltr"
-                  value={profile.username}
-                  onChange={(e) =>
-                    setProfile({
-                      ...profile,
-                      username: e.target.value.replace(/[^a-zA-Z0-9_]/g, ""),
-                    })
-                  }
-                  maxLength={32}
-                  autoCapitalize="none"
-                />
-              </div>
-              <span className="hint">{t("auth.usernameHint")}</span>
-            </div>
-            <div className="field">
-              <label>{t("settings.bio")}</label>
-              <textarea
-                className="textarea"
-                value={profile.bio}
-                onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                maxLength={300}
-                rows={2}
-              />
-            </div>
-            {(dirty || saved) && (
-              <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: 14 }}>
+          {isMobile && (
+            <div className="pf-me">
+              <div className="pf-me-top">
+                <RoundButton icon="grid-qr" label={t("qr.mine")} onClick={() => setQrOpen(true)} />
                 <button
-                  className="btn btn-primary btn-sm"
-                  disabled={!dirty}
-                  onClick={() => save(profile)}
+                  className={`pf-edit${editingProfile ? " on" : ""}`}
+                  onClick={() => setEditingProfile((v) => !v)}
                 >
-                  {saved ? <Icon name="check" size={16} /> : null}
-                  {saved ? t("common.saved") : t("common.save")}
+                  {editingProfile ? t("profile.done") : t("common.edit")}
                 </button>
               </div>
-            )}
-          </div>
+              <div className="avatar-edit">
+                <Avatar id={me.id} name={me.displayName} media={me.avatar} size={128} />
+                <button
+                  className="icon-btn accent"
+                  onClick={changePhoto}
+                  aria-label={t("settings.changePhoto")}
+                >
+                  <Icon name="camera" size={16} />
+                </button>
+              </div>
+              <h2>{me.displayName}</h2>
+              <div className="pf-me-sub">
+                <span className="ltr">@{me.username}</span>
+                {me.bio && <span className="pf-me-bio">{me.bio}</span>}
+              </div>
+              <div className="card-group pf-links">
+                <button className="item" onClick={() => useApp.getState().openDirect(me.id)}>
+                  <span className="pf-ic" style={{ background: "#3478f6" }}>
+                    <Icon name="bookmark" size={17} filled />
+                  </span>
+                  <div className="grow">{t("list.saved")}</div>
+                  <Icon name="forward" size={16} className="flip-rtl chev" />
+                </button>
+                <button className="item" onClick={() => useApp.setState({ section: "calls" })}>
+                  <span className="pf-ic" style={{ background: "#2fb85a" }}>
+                    <Icon name="phone" size={17} filled />
+                  </span>
+                  <div className="grow">{t("call.history")}</div>
+                  <Icon name="forward" size={16} className="flip-rtl chev" />
+                </button>
+                <button className="item" onClick={() => jump("set-sessions")}>
+                  <span className="pf-ic" style={{ background: "#f2a33a" }}>
+                    <Icon name="server" size={17} />
+                  </span>
+                  <div className="grow">{t("settings.sessions")}</div>
+                  <Icon name="forward" size={16} className="flip-rtl chev" />
+                </button>
+                <button className="item" onClick={() => setLookOpen(true)}>
+                  <span className="pf-ic" style={{ background: "#17a9c2" }}>
+                    <Icon name="palette" size={17} />
+                  </span>
+                  <div className="grow">{t("look.title")}</div>
+                  <Icon name="forward" size={16} className="flip-rtl chev" />
+                </button>
+                <button className="item" onClick={() => jump("set-storage")}>
+                  <span className="pf-ic" style={{ background: "#9b6bf2" }}>
+                    <Icon name="database" size={17} />
+                  </span>
+                  <div className="grow">{t("storage.title")}</div>
+                  <Icon name="forward" size={16} className="flip-rtl chev" />
+                </button>
+              </div>
+            </div>
+          )}
+          {!isMobile && (
+            <div className="me-card">
+              <div className="avatar-edit">
+                <Avatar id={me.id} name={me.displayName} media={me.avatar} size={96} />
+                <button
+                  className="icon-btn accent"
+                  onClick={changePhoto}
+                  aria-label={t("settings.changePhoto")}
+                >
+                  <Icon name="camera" size={16} />
+                </button>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{me.displayName}</div>
+                <div className="ltr" style={{ color: "var(--text-2)" }}>
+                  @{me.username}
+                </div>
+              </div>
+            </div>
+          )}
+          {qrOpen && <QrModal onClose={() => setQrOpen(false)} />}
+
+          {error && <div className="form-error">{error}</div>}
+          {(!isMobile || editingProfile) && (
+            <>
+              <div className="section-label">{t("settings.profile")}</div>
+              <div className="card-group form-group">
+                <div className="field">
+                  <label>{t("auth.displayName")}</label>
+                  <input
+                    className="input"
+                    value={profile.displayName}
+                    onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
+                    maxLength={64}
+                  />
+                </div>
+                <div className="field">
+                  <label>{t("auth.username")}</label>
+                  <div className="input-prefix">
+                    <span>@</span>
+                    <input
+                      className="input ltr"
+                      dir="ltr"
+                      value={profile.username}
+                      onChange={(e) =>
+                        setProfile({
+                          ...profile,
+                          username: e.target.value.replace(/[^a-zA-Z0-9_]/g, ""),
+                        })
+                      }
+                      maxLength={32}
+                      autoCapitalize="none"
+                    />
+                  </div>
+                  <span className="hint">{t("auth.usernameHint")}</span>
+                </div>
+                <div className="field">
+                  <label>{t("settings.bio")}</label>
+                  <textarea
+                    className="textarea"
+                    value={profile.bio}
+                    onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                    maxLength={300}
+                    rows={2}
+                  />
+                </div>
+                {(dirty || saved) && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: 14 }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={!dirty}
+                      onClick={() => save(profile)}
+                    >
+                      {saved ? <Icon name="check" size={16} /> : null}
+                      {saved ? t("common.saved") : t("common.save")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="section-label">{t("settings.privacy")}</div>
           <div className="card-group">
@@ -221,6 +306,13 @@ export function SettingsPane() {
 
           <div className="section-label">{t("settings.appearance")}</div>
           <div className="card-group">
+            <button className="item" onClick={() => setLookOpen(true)}>
+              <span className="item-icon" style={{ background: "#17a9c2" }}>
+                <Icon name="palette" size={18} />
+              </span>
+              <div className="grow">{t("look.title")}</div>
+              <Icon name="forward" size={18} className="flip-rtl" />
+            </button>
             <div className="item">
               <span className="item-icon" style={{ background: "#0a84ff" }}>
                 <Icon name="globe" size={18} />
@@ -290,7 +382,9 @@ export function SettingsPane() {
             </div>
           </div>
 
-          <div className="section-label">{t("settings.sessions")}</div>
+          <div className="section-label" id="set-sessions">
+            {t("settings.sessions")}
+          </div>
           <div className="card-group">
             {sessions.map((s) => (
               <div key={s.id} className="item">
@@ -330,6 +424,11 @@ export function SettingsPane() {
               </button>
             )}
           </div>
+
+          <AppLockSettings />
+          <div id="set-storage" />
+          <MyStorage />
+          <DataStorage />
 
           <div className="section-label">{t("settings.storage")}</div>
           <div className="card-group">
@@ -398,6 +497,7 @@ export function SettingsPane() {
           </p>
         </div>
         {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
+        {lookOpen && <ChatAppearance onClose={() => setLookOpen(false)} />}
       </LargeTitleScreen>
     </div>
   );

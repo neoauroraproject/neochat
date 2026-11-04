@@ -3,7 +3,7 @@ import { del, get, mediaUrl, patch, post, upload } from "../api";
 import { useCall } from "../call";
 import { Icon } from "../components/Icon";
 import { Avatar, ColHead, Menu, Modal, pickFile, type MenuItem } from "../components/ui";
-import { chatTitle, num, presenceText } from "../format";
+import { chatTitle, num, presenceText, ttlLabel } from "../format";
 import { errorText, useT } from "../i18n";
 import { useApp } from "../store";
 import type { Chat, Member, Message, User } from "../types";
@@ -11,6 +11,7 @@ import { useMobile } from "./hooks";
 import { askRemoveChat } from "./chatActions";
 import { MediaViewer } from "./MediaViewer";
 import { MemberPicker } from "./NewRoomModal";
+import { ProfileHero, ProfileMedia } from "./ProfileView";
 
 export function InfoPanel({ chat }: { chat: Chat }) {
   const t = useT();
@@ -69,70 +70,144 @@ export function InfoPanel({ chat }: { chat: Chat }) {
           }
         />
       )}
-      <div
-        className="info-top"
-        style={{ display: "flex", justifyContent: "space-between", padding: "10px 10px 0" }}
-      >
-        <button className="icon-btn" onClick={close} aria-label={t("common.close")}>
-          <Icon name={isMobile ? "back" : "x"} size={20} className={isMobile ? "flip-rtl" : ""} />
-        </button>
-        {isRoom && admin && (
-          <button
-            className="icon-btn"
-            onClick={() => setEditing(true)}
-            aria-label={t("room.editInfo")}
-          >
-            <Icon name="edit" size={19} />
-          </button>
-        )}
-      </div>
-      <div className="info-hero">
-        <Avatar
-          id={chat.saved ? -1 : (chat.peer?.id ?? chat.id)}
-          name={title}
-          media={chat.saved ? undefined : (chat.peer?.avatar ?? chat.avatar)}
-          size={104}
-          icon={chat.saved ? "bookmark" : undefined}
+      {isMobile ? (
+        <ProfileHero
+          chat={chat}
+          title={title}
+          status={
+            chat.type === "direct"
+              ? chat.saved
+                ? ""
+                : presenceText(chat.peer, lang)
+              : t(chat.type === "channel" ? "presence.subscribers" : "presence.members", {
+                  n: num(chat.memberCount, lang),
+                })
+          }
+          online={chat.type === "direct" && !chat.saved && chat.peer?.online}
+          onBack={close}
+          onEdit={isRoom && admin ? () => setEditing(true) : undefined}
+          more={[
+            {
+              icon: chat.pinned ? "pin" : "pin",
+              label: chat.pinned ? t("list.unpin") : t("list.pin"),
+              onClick: () => useApp.getState().setPrefs(chat.id, { pinned: !chat.pinned }),
+            },
+            {
+              icon: "archive",
+              label: chat.archived ? t("list.unarchive") : t("list.archive"),
+              onClick: () => useApp.getState().setPrefs(chat.id, { archived: !chat.archived }),
+            },
+            {
+              icon: isRoom ? "logout" : "trash",
+              label: isRoom ? t("room.leave") : t("list.deleteChat"),
+              danger: true,
+              onClick: isRoom ? leave : remove,
+            },
+          ]}
         />
-        <h3>{title}</h3>
-        <div className="s">
-          {chat.type === "direct"
-            ? chat.saved
-              ? ""
-              : presenceText(chat.peer, lang)
-            : t(chat.type === "channel" ? "presence.subscribers" : "presence.members", {
-                n: num(chat.memberCount, lang),
-              })}
-        </div>
-      </div>
-      <div className="info-actions">
-        {chat.type === "direct" && !chat.saved && config?.callsEnabled && (
-          <>
-            <button onClick={() => chat.peer && useCall.getState().start(chat.peer, false)}>
-              <Icon name="phone" size={20} />
-              {t("call.voice")}
+      ) : (
+        <>
+          <div
+            className="info-top"
+            style={{ display: "flex", justifyContent: "space-between", padding: "10px 10px 0" }}
+          >
+            <button className="icon-btn" onClick={close} aria-label={t("common.close")}>
+              <Icon
+                name={isMobile ? "back" : "x"}
+                size={20}
+                className={isMobile ? "flip-rtl" : ""}
+              />
             </button>
-            {config.videoCallsEnabled && (
-              <button onClick={() => chat.peer && useCall.getState().start(chat.peer, true)}>
-                <Icon name="video" size={20} />
-                {t("call.video")}
+            {isRoom && admin && (
+              <button
+                className="icon-btn"
+                onClick={() => setEditing(true)}
+                aria-label={t("room.editInfo")}
+              >
+                <Icon name="edit" size={19} />
               </button>
             )}
-          </>
-        )}
-        <button onClick={() => useApp.getState().setPrefs(chat.id, { muted: !chat.muted })}>
-          <Icon name={chat.muted ? "bell" : "bell-off"} size={20} />
-          {chat.muted ? t("list.unmute") : t("list.mute")}
-        </button>
-        {isRoom && (
-          <button onClick={leave}>
-            <Icon name="logout" size={20} />
-            {t("room.leave")}
-          </button>
-        )}
-      </div>
-
+          </div>
+          <div className="info-hero">
+            <Avatar
+              id={chat.saved ? -1 : (chat.peer?.id ?? chat.id)}
+              name={title}
+              media={chat.saved ? undefined : (chat.peer?.avatar ?? chat.avatar)}
+              size={104}
+              icon={chat.saved ? "bookmark" : undefined}
+            />
+            <h3>{title}</h3>
+            <div className="s">
+              {chat.type === "direct"
+                ? chat.saved
+                  ? ""
+                  : presenceText(chat.peer, lang)
+                : t(chat.type === "channel" ? "presence.subscribers" : "presence.members", {
+                    n: num(chat.memberCount, lang),
+                  })}
+            </div>
+          </div>
+          <div className="info-actions">
+            {chat.type === "direct" && !chat.saved && config?.callsEnabled && (
+              <>
+                <button onClick={() => chat.peer && useCall.getState().start(chat.peer, false)}>
+                  <Icon name="phone" size={20} />
+                  {t("call.voice")}
+                </button>
+                {config.videoCallsEnabled && (
+                  <button onClick={() => chat.peer && useCall.getState().start(chat.peer, true)}>
+                    <Icon name="video" size={20} />
+                    {t("call.video")}
+                  </button>
+                )}
+              </>
+            )}
+            <button onClick={() => useApp.getState().setPrefs(chat.id, { muted: !chat.muted })}>
+              <Icon name={chat.muted ? "bell" : "bell-off"} size={20} />
+              {chat.muted ? t("list.unmute") : t("list.mute")}
+            </button>
+            {isRoom && (
+              <button onClick={leave}>
+                <Icon name="logout" size={20} />
+                {t("room.leave")}
+              </button>
+            )}
+          </div>
+        </>
+      )}
       <div className="info-body">
+        {!chat.saved && (chat.type === "direct" || chat.role !== "member") && (
+          <div className="card-group">
+            <div className="item">
+              <span className="item-icon" style={{ background: "#5e5ce6" }}>
+                <Icon name="clock" size={17} />
+              </span>
+              <div className="grow">
+                {t("ttl.title")}
+                <div className="muted">{t("ttl.explain")}</div>
+              </div>
+              <select
+                className="select"
+                value={chat.ttl || 0}
+                onChange={async (e) => {
+                  const seconds = Number(e.target.value);
+                  try {
+                    await patch(`/api/chats/${chat.id}/ttl`, { seconds });
+                    useApp.getState().upsertChat({ ...chat, ttl: seconds });
+                  } catch (err) {
+                    useApp.getState().toast(errorText(lang, err), "error");
+                  }
+                }}
+              >
+                {[0, 30, 60, 3600, 86400, 604800].map((v) => (
+                  <option key={v} value={v}>
+                    {v ? ttlLabel(v, lang) : t("ttl.off")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
         {(chat.peer?.bio || chat.description || chat.peer?.username || publicLink || inviteLink) &&
           !chat.saved && (
             <div className="card-group">
@@ -213,7 +288,8 @@ export function InfoPanel({ chat }: { chat: Chat }) {
             </div>
           )}
 
-        {media.length > 0 && (
+        {isMobile && !chat.saved && <ProfileMedia chat={chat} />}
+        {!isMobile && media.length > 0 && (
           <>
             <div className="section-label">{t("room.mediaShared")}</div>
             <div className="media-grid" style={{ marginBottom: 18 }}>
@@ -420,7 +496,7 @@ function EditRoomModal({ chat, onClose }: { chat: Chat; onClose: () => void }) {
   };
   const photo = async () => {
     const f = await pickFile("image/*");
-    if (f) setAvatar((await upload(f)).id);
+    if (f) setAvatar((await upload(f, { kind: "avatar" })).id);
   };
   return (
     <Modal

@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { Icon } from "../components/Icon";
-import { Modal } from "../components/ui";
-import { fileSize } from "../format";
+import { Modal, Toggle } from "../components/ui";
+import { dateOf, expiryFor, fileSize } from "../format";
 import { translate, useT } from "../i18n";
 import { useApp } from "../store";
+import { useMyStorage } from "./MyStorage";
 
 interface Item {
   id: number;
@@ -45,7 +46,8 @@ export const useStaged = create<StagedState>((set, get) => ({
       const kind = kindOf(file);
       const limit =
         kind === "image" ? cfg?.maxImageMB : kind === "video" ? cfg?.maxVideoMB : cfg?.maxFileMB;
-      if (limit && file.size > limit * 1024 * 1024) {
+      // Photos are shrunk before upload, so only their compressed size has to fit the limit.
+      if (kind !== "image" && limit && file.size > limit * 1024 * 1024) {
         useApp.getState().toast(translate(lang, "chat.tooLarge", { n: limit }), "error");
         continue;
       }
@@ -68,16 +70,26 @@ export function MediaPreview({
   chatId,
   initialCaption,
   onSend,
+  allowOnce,
 }: {
   chatId: number;
   initialCaption: string;
-  onSend: (files: File[], caption: string) => void;
+  onSend: (files: File[], caption: string, opts: { original: boolean; once: boolean }) => void;
+  /** View-once is offered in private chats only. */
+  allowOnce?: boolean;
 }) {
   const t = useT();
   const lang = useApp((s) => s.lang);
   const maxLen = useApp((s) => s.config?.maxMessageLen);
   const { items, clear } = useStaged();
   const [caption, setCaption] = useState(initialCaption);
+  const [original, setOriginal] = useState(false);
+  const [once, setOnce] = useState(false);
+  const config = useApp((s) => s.config);
+  const storage = useMyStorage((s) => s.info);
+  useEffect(() => {
+    useMyStorage.getState().load();
+  }, []);
   const capRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -114,10 +126,22 @@ export function MediaPreview({
     onSend(
       chosen.map((i) => i.file),
       caption.trim(),
+      { original, once },
     );
     clear();
   };
 
+  // What these files will take: photos shrink to about a quarter unless sent as originals.
+  const estimate = (i: Item) =>
+    i.kind === "image" && !original ? i.file.size * 0.25 : i.file.size;
+  const incoming = chosen.reduce((n, i) => n + estimate(i), 0);
+  const quotaFull =
+    !!storage &&
+    storage.quota > 0 &&
+    storage.quotaMode === "block" &&
+    storage.used + incoming > storage.quota;
+  const ends = chosen.map((i) => expiryFor(estimate(i), config));
+  const until = ends.length && ends.every((e) => e === ends[0]) ? ends[0] : -1;
   const single = items.length === 1 ? items[0] : null;
   const media = items.every((i) => i.kind !== "file");
 
@@ -130,36 +154,77 @@ export function MediaPreview({
       }
       onClose={clear}
       footer={
-        <div className="mp-foot">
-          <button className="icon-btn" onClick={addMore} aria-label={t("media.add")}>
-            <Icon name="plus" size={20} />
-          </button>
-          <textarea
-            ref={capRef}
-            className="mp-caption"
-            rows={1}
-            value={caption}
-            maxLength={maxLen}
-            placeholder={t("media.caption")}
-            onChange={(e) => setCaption(e.target.value)}
-            onKeyDown={(e) => {
-              const coarse = window.matchMedia("(pointer: coarse)").matches;
-              if (e.key === "Enter" && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                send();
-              }
-            }}
-          />
-          <button
-            className="send mp-send"
-            onClick={send}
-            disabled={!chosen.length}
-            aria-label={t("chat.send")}
-          >
-            <Icon name="plane" size={19} filled />
-            {chosen.length > 1 && <span className="mp-count">{chosen.length}</span>}
-          </button>
-        </div>
+        <>
+          {quotaFull ? (
+            <div className="mp-note danger">
+              <Icon name="alert" size={15} />
+              {t("storage.previewFull", {
+                used: fileSize(storage!.used, lang),
+                quota: fileSize(storage!.quota, lang),
+              })}
+            </div>
+          ) : (
+            chosen.length > 0 &&
+            until !== -1 && (
+              <div className="mp-note">
+                <Icon name="clock" size={14} />
+                {until
+                  ? t(chosen.length > 1 ? "storage.previewUntilMany" : "storage.previewUntil", {
+                      d: dateOf(until, lang),
+                    })
+                  : t("storage.previewForever")}
+              </div>
+            )
+          )}
+          {allowOnce && chosen.length > 0 && chosen.every((i) => i.kind !== "file") && (
+            <label className="mp-original">
+              <Toggle checked={once} onChange={setOnce} label={t("once.toggle")} />
+              <span>
+                {t("once.toggle")}
+                <small>{t(once ? "once.toggleOn" : "once.toggleOff")}</small>
+              </span>
+            </label>
+          )}
+          {!once && chosen.some((i) => i.kind === "image") && (
+            <label className="mp-original">
+              <Toggle checked={original} onChange={setOriginal} label={t("media.original")} />
+              <span>
+                {t("media.original")}
+                <small>{t(original ? "media.originalOn" : "media.originalOff")}</small>
+              </span>
+            </label>
+          )}
+          <div className="mp-foot">
+            <button className="icon-btn" onClick={addMore} aria-label={t("media.add")}>
+              <Icon name="plus" size={20} />
+            </button>
+            <textarea
+              ref={capRef}
+              className="mp-caption"
+              rows={1}
+              value={caption}
+              maxLength={maxLen}
+              placeholder={t("media.caption")}
+              onChange={(e) => setCaption(e.target.value)}
+              onKeyDown={(e) => {
+                const coarse = window.matchMedia("(pointer: coarse)").matches;
+                if (e.key === "Enter" && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+            />
+            <button
+              className="send mp-send"
+              onClick={send}
+              disabled={!chosen.length || quotaFull}
+              aria-label={t("chat.send")}
+            >
+              <Icon name="plane" size={19} filled />
+              {chosen.length > 1 && <span className="mp-count">{chosen.length}</span>}
+            </button>
+          </div>
+        </>
       }
     >
       {single && single.kind !== "file" ? (

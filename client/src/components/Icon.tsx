@@ -32,6 +32,10 @@ const paths: Record<string, string> = {
   more: "M5 12h.01M12 12h.01M19 12h.01",
   "more-v": "M12 5h.01M12 12h.01M12 19h.01",
   check: "M5 12.5l4.5 4.5L19 7.5",
+  "arrow-out": "M7 17L17 7M9 7h8v8",
+  "arrow-in": "M17 7L7 17M15 17H7V9",
+  "grid-qr":
+    "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5zM14 18.5h1.5M18.5 14H20",
   checks: "M2 12.5l4.5 4.5L16 7.5M10.5 16.5l.5.5L20.5 7.5",
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2",
   alert: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 8v5M12 16h.01",

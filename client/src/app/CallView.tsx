@@ -1,30 +1,41 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useCall } from "../call";
+import { canPickOutput, useCall } from "../call";
 import { Icon } from "../components/Icon";
-import { Avatar } from "../components/ui";
+import { Avatar, Menu, type MenuItem } from "../components/ui";
 import { duration } from "../format";
 import { useT } from "../i18n";
+import { canDocPip, canSystemPip, enterSystemPip, openDocPip, usePip } from "../pip";
 import { useApp } from "../store";
-import { useTick } from "./hooks";
+import type { Message } from "../types";
+import { CallFloat, useStream } from "./CallFloat";
+import { useMobile, useTick } from "./hooks";
 
 // Apple's momentum projection: where a flick would come to rest.
 const project = (v: number, rate = 0.99) => ((v / 1000) * rate) / (1 - rate);
 
-/** Self-view that follows the finger 1:1 and snaps to the corner its momentum points at. */
-function DraggablePip({ children }: { children: React.ReactNode }) {
+/**
+ * Small video that follows the finger 1:1 and snaps to the corner its momentum points at.
+ * A tap (no drag) swaps the two pictures, like FaceTime.
+ */
+function DraggablePip({ children, onTap }: { children: React.ReactNode; onTap?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [corner, setCorner] = useState<"tl" | "tr" | "bl" | "br">("tr");
-  const drag = useRef<{ x: number; y: number; hist: { x: number; y: number; t: number }[] } | null>(
-    null,
-  );
+  const drag = useRef<{
+    x: number;
+    y: number;
+    t: number;
+    hist: { x: number; y: number; t: number }[];
+  } | null>(null);
 
   const onDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
     const el = ref.current!;
     el.setPointerCapture(e.pointerId);
     drag.current = {
       x: e.clientX,
       y: e.clientY,
+      t: e.timeStamp,
       hist: [{ x: e.clientX, y: e.clientY, t: e.timeStamp }],
     };
     el.style.transition = "none";
@@ -40,11 +51,16 @@ function DraggablePip({ children }: { children: React.ReactNode }) {
     const d = drag.current;
     if (!d) return;
     drag.current = null;
+    const el = ref.current!;
+    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6 && e.timeStamp - d.t < 350) {
+      el.style.transform = "";
+      onTap?.();
+      return;
+    }
     const first = d.hist[0];
     const dt = Math.max(1, e.timeStamp - first.t);
     const vx = ((e.clientX - first.x) / dt) * 1000;
     const vy = ((e.clientY - first.y) / dt) * 1000;
-    const el = ref.current!;
     const r = el.getBoundingClientRect();
     const parent = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect() ?? {
       left: 0,
@@ -82,36 +98,96 @@ function DraggablePip({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * New messages from the person we are talking to while the call fills the screen: the latest one
+ * floats over the picture for a few seconds and the chat button counts them.
+ */
+function useCallMessages(chatId: number | null, watching: boolean) {
+  const meId = useApp((s) => s.me?.id);
+  const last = useApp((s) => {
+    const l = chatId ? s.messages[chatId] : undefined;
+    return l?.[l.length - 1];
+  });
+  const seen = useRef(last?.id ?? 0);
+  const [unread, setUnread] = useState(0);
+  const [bubble, setBubble] = useState<Message | null>(null);
+  useEffect(() => {
+    // Messages of this chat must be loaded for new ones to land in the store.
+    if (chatId && !useApp.getState().messages[chatId]) useApp.getState().loadMessages(chatId);
+  }, [chatId]);
+  useEffect(() => {
+    if (!last || last.id <= seen.current) return;
+    seen.current = last.id;
+    if (last.senderId === meId || last.kind === "call" || !watching) return;
+    setUnread((n) => n + 1);
+    setBubble(last);
+    const id = window.setTimeout(() => setBubble(null), 4500);
+    return () => window.clearTimeout(id);
+  }, [last, meId, watching]);
+  useEffect(() => {
+    if (!watching) setUnread(0);
+  }, [watching]);
+  return { unread, bubble, clear: () => setUnread(0) };
+}
+
 /** Call panel from the reference: squircle portrait, name, timer and a glass pill of controls. */
 export function CallView({ embedded }: { embedded?: boolean }) {
   const t = useT();
   const lang = useApp((s) => s.lang);
   const st = useCall();
-  const remoteVideo = useRef<HTMLVideoElement>(null);
-  const localVideo = useRef<HTMLVideoElement>(null);
-  const remoteAudio = useRef<HTMLAudioElement>(null);
+  const isMobile = useMobile();
+  const docWin = usePip((s) => s.docWindow);
+  const remoteAudio = useStream<HTMLAudioElement>(st.remoteStream);
+  const mainVideo = useStream<HTMLVideoElement>(st.swapped ? st.localStream : st.remoteStream);
+  const smallVideo = useStream<HTMLVideoElement>(st.swapped ? st.remoteStream : st.localStream);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [chrome, setChrome] = useState(true);
   const hideTimer = useRef<number>();
   useTick(1000);
+  const full = !st.minimized && st.phase !== "idle";
+  const msgs = useCallMessages(st.chatId, full && !st.chatOpen && st.phase === "active");
 
+  // Route the call audio to the output picked in the speaker menu (Android, desktop).
   useEffect(() => {
-    if (remoteAudio.current && remoteAudio.current.srcObject !== st.remoteStream)
-      remoteAudio.current.srcObject = st.remoteStream;
-    if (remoteVideo.current && remoteVideo.current.srcObject !== st.remoteStream)
-      remoteVideo.current.srcObject = st.remoteStream;
-  });
-  useEffect(() => {
-    if (localVideo.current && localVideo.current.srcObject !== st.localStream)
-      localVideo.current.srcObject = st.localStream;
-  });
-  useEffect(() => {
-    if (remoteAudio.current) remoteAudio.current.muted = st.speakerOff;
-  }, [st.speakerOff]);
+    const el = remoteAudio.current as
+      (HTMLAudioElement & { setSinkId?(id: string): Promise<void> }) | null;
+    if (el?.setSinkId && canPickOutput) el.setSinkId(st.outputId).catch(() => {});
+  }, [st.outputId, st.minimized, embedded, remoteAudio]);
+  const [outputs, setOutputs] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const pickOutput = async (e: React.MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    let devices: MediaDeviceInfo[] = [];
+    try {
+      devices = (await navigator.mediaDevices.enumerateDevices()).filter(
+        (d) => d.kind === "audiooutput" && d.deviceId !== "communications",
+      );
+    } catch {
+      /* no device list */
+    }
+    if (devices.length < 2) {
+      useApp.getState().toast(t("call.oneOutput"));
+      return;
+    }
+    const current = st.outputId || "default";
+    setOutputs({
+      x: r.left,
+      y: r.top - 8,
+      items: devices.map((d, i) => ({
+        icon: (d.deviceId || "default") === current ? "check" : "speaker",
+        label: d.label || `${t("call.speaker")} ${i + 1}`,
+        onClick: () => st.setOutput(d.deviceId === "default" ? "" : d.deviceId),
+      })),
+    });
+  };
 
   const remoteHasVideo = !!st.remoteStream
     ?.getVideoTracks()
     .some((tr) => tr.readyState === "live" && !tr.muted);
-  const showVideo = st.video && st.phase === "active" && remoteHasVideo;
+  const localHasVideo = !!st.localStream?.getVideoTracks().length && !st.cameraOff;
+  // The other side's camera is off or their app is in the background: show their photo instead
+  // of a frozen or black frame.
+  const peerPicture = remoteHasVideo && !st.peerState.cameraOff && !st.peerState.away;
+  const showVideo = st.phase === "active" && (st.swapped ? localHasVideo : peerPicture);
 
   // In video the controls fade after a few seconds; any touch brings them back.
   const poke = () => {
@@ -124,7 +200,42 @@ export function CallView({ embedded }: { embedded?: boolean }) {
     return () => window.clearTimeout(hideTimer.current);
   }, [showVideo]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Drag the full-screen call down to shrink it into the floating window.
+  const swipe = useRef<{ y: number; t: number; id: number } | null>(null);
+  const onSwipeDown = (e: React.PointerEvent) => {
+    poke();
+    if (embedded || st.phase === "incoming") return;
+    if ((e.target as HTMLElement).closest("button, .pip, .cp-bubble")) return;
+    swipe.current = { y: e.clientY, t: e.timeStamp, id: e.pointerId };
+  };
+  const onSwipeMove = (e: React.PointerEvent) => {
+    const s = swipe.current;
+    if (!s || e.pointerId !== s.id) return;
+    const dy = e.clientY - s.y;
+    if (dy < 8) return;
+    panelRef.current!.style.transition = "none";
+    panelRef.current!.style.transform = `translateY(${dy}px) scale(${1 - Math.min(0.15, dy / 2000)})`;
+    panelRef.current!.style.borderRadius = `${Math.min(28, dy / 6)}px`;
+  };
+  const onSwipeUp = (e: React.PointerEvent) => {
+    const s = swipe.current;
+    if (!s || e.pointerId !== s.id) return;
+    swipe.current = null;
+    const el = panelRef.current!;
+    const dy = e.clientY - s.y;
+    const v = dy / Math.max(1, e.timeStamp - s.t);
+    el.style.transition = "transform 320ms cubic-bezier(0.32, 0.72, 0, 1), border-radius 320ms";
+    if (dy > 120 || (dy > 30 && v > 0.6)) {
+      el.style.transform = "translateY(60%) scale(0.4)";
+      window.setTimeout(() => st.setMinimized(true), 200);
+    } else {
+      el.style.transform = "";
+      el.style.borderRadius = "";
+    }
+  };
+
   if (st.phase === "idle" || !st.peer) return null;
+  if (st.minimized && st.phase !== "incoming") return <CallFloat />;
 
   const elapsed = st.answeredAt ? duration((Date.now() - st.answeredAt) / 1000, lang) : "";
   const label =
@@ -136,25 +247,21 @@ export function CallView({ embedded }: { embedded?: boolean }) {
           ? t(st.callId ? "call.ringing" : "call.calling")
           : st.phase === "connecting"
             ? t("call.connecting")
-            : st.reconnecting
+            : st.reconnecting || st.peerAway
               ? t("call.reconnecting")
               : elapsed;
   const ringing = st.phase === "incoming" || st.phase === "outgoing";
-  const audioEl = <audio ref={remoteAudio} autoPlay playsInline />;
 
-  if (st.minimized && st.phase !== "incoming") {
-    return createPortal(
-      <div className="call-mini" role="button" onClick={() => st.setMinimized(false)}>
-        {audioEl}
-        <Icon name={st.video ? "video" : "phone"} size={16} />
-        <span className="t">
-          {st.peer.displayName} · {label}
-        </span>
-        <span className="tap">{t("call.backToCall")}</span>
-      </div>,
-      document.body,
-    );
-  }
+  const openChat = () => {
+    msgs.clear();
+    if (!st.chatId) return;
+    if (!useApp.getState().chats[st.chatId]) useApp.getState().refreshChat(st.chatId);
+    if (isMobile) {
+      // Phone: the video shrinks into the floating window and the chat opens underneath.
+      st.setMinimized(true);
+      useApp.getState().openChat(st.chatId);
+    } else st.setChatOpen(!st.chatOpen);
+  };
 
   const ctl = (icon: string, text: string, onClick: () => void, on = false, cls = "") => (
     <button
@@ -168,22 +275,49 @@ export function CallView({ embedded }: { embedded?: boolean }) {
     </button>
   );
 
+  const peerBadges = st.phase === "active" && (
+    <div className="cp-peer-state">
+      {st.peerState.muted && (
+        <span title={t("call.peerMuted")}>
+          <Icon name="mic-off" size={14} />
+        </span>
+      )}
+      {(st.peerState.cameraOff || st.peerState.away) && st.video && (
+        <span title={t(st.peerState.away ? "call.peerAway" : "call.peerCameraOff")}>
+          <Icon name="video-off" size={14} />
+        </span>
+      )}
+      {st.net?.quality === "poor" && (
+        <span title={t("call.netPoor")}>
+          <Icon name="alert" size={14} />
+        </span>
+      )}
+    </div>
+  );
+
   const panel = (
     <div
+      ref={panelRef}
       className={`call-panel${embedded ? " embedded" : " full"}${showVideo ? " video" : ""}${chrome ? "" : " chrome-off"}${st.phase === "ended" ? " ended" : ""}`}
       role="dialog"
       aria-label={label}
-      onPointerDown={poke}
+      onPointerDown={onSwipeDown}
+      onPointerMove={onSwipeMove}
+      onPointerUp={onSwipeUp}
+      onPointerCancel={onSwipeUp}
     >
-      {audioEl}
-      {st.video && (
+      <audio ref={remoteAudio} autoPlay playsInline />
+      {(st.video || localHasVideo) && (
         <video
-          ref={remoteVideo}
+          ref={mainVideo}
           className="cp-remote"
           autoPlay
           playsInline
           muted
-          style={{ opacity: showVideo ? 1 : 0 }}
+          style={{
+            opacity: showVideo ? 1 : 0,
+            transform: st.swapped && st.facing === "user" ? "scaleX(-1)" : undefined,
+          }}
         />
       )}
       <header className="cp-top">
@@ -200,12 +334,19 @@ export function CallView({ embedded }: { embedded?: boolean }) {
           {t("call.secure")}
         </span>
         <span className="cp-actions">
-          <button className="icon-btn" aria-label={t("room.addMember")} disabled>
-            <Icon name="user-plus" size={22} />
-          </button>
-          <button className="icon-btn" aria-label="more" disabled>
-            <Icon name="more" size={22} />
-          </button>
+          {st.phase === "active" && (canDocPip || (canSystemPip && st.video)) && !docWin && (
+            <button
+              className="icon-btn"
+              aria-label={t("call.pip")}
+              title={t("call.pip")}
+              onClick={async () => {
+                const ok = canDocPip ? await openDocPip() : await enterSystemPip();
+                if (!ok) useApp.getState().toast(t("call.pipUnavailable"));
+              }}
+            >
+              <Icon name="external" size={21} />
+            </button>
+          )}
         </span>
       </header>
 
@@ -224,17 +365,63 @@ export function CallView({ embedded }: { embedded?: boolean }) {
           </div>
         )}
         <h2>{st.peer.displayName}</h2>
-        <div className="cp-state">{label}</div>
+        <div className="cp-state">
+          {label}
+          {st.phase === "active" && st.net && st.net.quality !== "good" && !st.reconnecting && (
+            <span
+              className={`cp-net ${st.net.quality}`}
+              title={`${st.net.rtt} ms · ${Math.round(st.net.loss * 100)}% · ${st.net.kbps} kbps`}
+            >
+              <i />
+              {t(st.net.quality === "poor" ? "call.netPoor" : "call.netFair")}
+            </span>
+          )}
+        </div>
+        {!showVideo &&
+          st.video &&
+          st.phase === "active" &&
+          (st.peerState.cameraOff || st.peerState.away) && (
+            <div className="cp-sub">
+              {t(st.peerState.away ? "call.peerAway" : "call.peerCameraOff")}
+            </div>
+          )}
+        {peerBadges}
+        {st.weakHint && (
+          <button className="cp-hint" onClick={st.toggleCamera}>
+            <Icon name="video-off" size={16} />
+            {t("call.weakHint")}
+          </button>
+        )}
+        {st.videoAsk && (
+          <div className="cp-ask">
+            <span>{t("call.videoAsk", { name: st.peer.displayName })}</span>
+            <button className="btn btn-sm btn-primary" onClick={st.toggleCamera}>
+              {t("call.turnOnCamera")}
+            </button>
+            <button className="btn btn-sm" onClick={st.dismissVideoAsk}>
+              {t("call.notNow")}
+            </button>
+          </div>
+        )}
       </div>
 
-      {st.video && st.localStream && !st.cameraOff && st.phase !== "incoming" && (
-        <DraggablePip>
+      {msgs.bubble && (
+        <button className="cp-bubble" onClick={openChat}>
+          <b>{msgs.bubble.sender.displayName}</b>
+          <span>{msgs.bubble.text || (msgs.bubble.media ? t("chat.file") : "")}</span>
+        </button>
+      )}
+
+      {st.phase === "active" && (st.swapped ? remoteHasVideo : localHasVideo) && (
+        <DraggablePip onTap={st.toggleSwap}>
           <video
-            ref={localVideo}
+            ref={smallVideo}
             autoPlay
             playsInline
             muted
-            style={{ transform: st.facing === "user" ? "scaleX(-1)" : "none" }}
+            style={{
+              transform: !st.swapped && st.facing === "user" ? "scaleX(-1)" : "none",
+            }}
           />
         </DraggablePip>
       )}
@@ -253,21 +440,40 @@ export function CallView({ embedded }: { embedded?: boolean }) {
       ) : (
         <div className="cp-pill">
           {ctl(
-            st.cameraOff || !st.video ? "video-off" : "video",
+            localHasVideo ? "video" : "video-off",
             t("call.camera"),
             st.toggleCamera,
-            st.cameraOff || !st.video,
+            !localHasVideo,
           )}
           {ctl(st.muted ? "mic-off" : "mic", t("call.mute"), st.toggleMute, st.muted)}
-          {ctl("flip", t("call.flip"), st.flip)}
-          {ctl(
-            st.speakerOff ? "speaker-off" : "speaker",
-            t("call.speaker"),
-            st.toggleSpeaker,
-            st.speakerOff,
+          {localHasVideo && ctl("flip", t("call.flip"), st.flip)}
+          {st.phase === "active" && (
+            <button
+              className={`cp-btn${st.chatOpen ? " on" : ""}`}
+              onClick={openChat}
+              aria-label={t("call.chat")}
+              title={t("call.chat")}
+            >
+              <Icon name="chat" size={22} />
+              {msgs.unread > 0 && <span className="badge">{msgs.unread}</span>}
+            </button>
+          )}
+          {/* iOS picks the route itself (AirPods take over when connected), so no button there. */}
+          {canPickOutput && (
+            <button
+              className={`cp-btn${st.outputId ? " on" : ""}`}
+              onClick={pickOutput}
+              aria-label={t("call.speaker")}
+              title={t("call.speaker")}
+            >
+              <Icon name="speaker" size={22} />
+            </button>
           )}
           {ctl("phone-down", t("call.end"), st.hangup, false, "end")}
         </div>
+      )}
+      {outputs && (
+        <Menu x={outputs.x} y={outputs.y} items={outputs.items} onClose={() => setOutputs(null)} />
       )}
     </div>
   );

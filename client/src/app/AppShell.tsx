@@ -6,15 +6,18 @@ import { Avatar, BrandLogo } from "../components/ui";
 import { num } from "../format";
 import { useT } from "../i18n";
 import { syncPush } from "../notify";
+import { applyUpdate, persistStorage, useUpdate } from "../update";
+import { isIOS, isStandalone } from "../pwa";
 import { useApp, type Section } from "../store";
 import type { Chat, RoomPreview } from "../types";
+import { CallPipWindow } from "./CallPipWindow";
 import { CallView } from "./CallView";
 import { ChatList } from "./ChatList";
 import { Conversation } from "./Conversation";
 import { useMedia, useMobile } from "./hooks";
 import { InfoPanel } from "./InfoPanel";
 import { InstallGuide } from "./InstallGuide";
-import { goBack } from "./nav";
+import { backWasSystemGesture, goBack, useLayer, useNativeSwipe } from "./nav";
 import { CallsPane, ExplorePane } from "./Panes";
 import { RoomPreviewModal } from "./RoomPreviewModal";
 import { SettingsPane } from "./SettingsPane";
@@ -32,11 +35,11 @@ function useUnreadTotal() {
 const sections: {
   id: Section;
   icon: string;
-  key: "nav.chats" | "nav.calls" | "nav.explore" | "nav.settings";
+  key: "nav.chats" | "nav.calls" | "nav.explore" | "nav.contacts" | "nav.settings";
 }[] = [
   { id: "chats", icon: "chat", key: "nav.chats" },
   { id: "calls", icon: "video", key: "nav.calls" },
-  { id: "explore", icon: "users", key: "nav.explore" },
+  { id: "explore", icon: "users", key: "nav.contacts" },
   { id: "settings", icon: "settings", key: "nav.settings" },
 ];
 
@@ -111,7 +114,7 @@ function BrandMark() {
   );
 }
 
-/** Telegram-style floating capsule: icons only, a lens slides behind the active tab. */
+/** Floating black tab bar: icons, and the active tab opens into a lighter pill with its name. */
 function TabCapsule({ hidden }: { hidden?: boolean }) {
   const t = useT();
   const section = useApp((s) => s.section);
@@ -135,7 +138,8 @@ function TabCapsule({ hidden }: { hidden?: boolean }) {
           aria-label={t(n.key)}
           onClick={() => useApp.setState({ section: n.id })}
         >
-          <Icon name={n.icon === "video" ? "phone" : n.icon} size={26} filled={section === n.id} />
+          <Icon name={n.icon === "video" ? "phone" : n.icon} size={24} stroke={1.7} />
+          {section === n.id && <span className="tab-label">{t(n.key)}</span>}
           {n.id === "chats" && unread > 0 && <span className="badge">{num(unread, lang)}</span>}
         </button>
       ))}
@@ -157,6 +161,20 @@ function Welcome() {
         <span className="copy">{t("common.copyright")}</span>
       </div>
     </section>
+  );
+}
+
+/** A new version finished installing in the background: reload when it suits the user. */
+function UpdateBanner() {
+  const t = useT();
+  const ready = useUpdate((s) => s.ready);
+  if (!ready) return null;
+  return (
+    <button className="update-banner" onClick={applyUpdate}>
+      <Icon name="download" size={16} />
+      {t("update.ready")}
+      <b>{t("update.reload")}</b>
+    </button>
   );
 }
 
@@ -208,7 +226,7 @@ function DeepLinks() {
         .refreshChat(fromPush)
         .then((c) => c && useApp.getState().openChat(c.id));
     }
-    if (join || handle || fromPush) history.replaceState(null, "", "/");
+    if (join || handle || fromPush) history.replaceState(history.state, "", "/");
   }, []);
 
   // Tapping a notification while the app is open in the background.
@@ -291,7 +309,11 @@ function useEdgeBack(
       }
     };
     const down = (e: PointerEvent) => {
-      if (e.pointerType !== "touch" || document.querySelector(".overlay")) return;
+      if (
+        e.pointerType !== "touch" ||
+        document.querySelector(".overlay, .viewer, .call-panel.full")
+      )
+        return;
       const edge = rtl ? el.clientWidth - e.clientX : e.clientX;
       if (edge > 28) return;
       const { top } = screens();
@@ -374,6 +396,10 @@ export function AppShell() {
   const infoOpen = useApp((s) => s.infoOpen);
   const callPhase = useCall((s) => s.phase);
   const callMin = useCall((s) => s.minimized);
+  const callChatOpen = useCall((s) => s.chatOpen);
+  const callChatId = useCall((s) => s.chatId);
+  const callChat = useApp((s) => (callChatId ? s.chats[callChatId] : undefined));
+  const nativeSwipe = useNativeSwipe();
   const phoneRef = useRef<HTMLDivElement>(null);
   const swiped = useRef(false);
   const leavingChat = useLeaving<Chat>(chat, 340);
@@ -384,7 +410,10 @@ export function AppShell() {
     swiped.current = true; // the screen already left under the finger: skip the exit animation
     goBack();
   }, []);
-  useEdgeBack(phoneRef, isMobile && !!chat && !infoOpen, commitSwipe);
+  // Safari (not installed) has its own back swipe that already drives the history stack; so does an
+  // installed iOS app whose system gesture could not be claimed. Ours runs everywhere else.
+  const ownSwipe = !(isIOS && (!isStandalone() || nativeSwipe));
+  useEdgeBack(phoneRef, isMobile && ownSwipe && !!chat && !infoOpen, commitSwipe);
   const showInfo = infoOpen && chat ? chat : undefined;
   const leavingInfo = useLeaving<Chat>(showInfo, 340);
   // The shared-files column stays open on wide screens; narrower ones slide it over the chat on demand.
@@ -407,6 +436,11 @@ export function AppShell() {
   useEffect(() => setPeek(false), [activeId]);
   const sideOpen = wide ? filesOpen : peek;
 
+  // Ask once to keep our offline data even when the phone runs low on space.
+  useEffect(() => {
+    persistStorage();
+  }, []);
+
   // Escape closes the top layer.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -420,20 +454,18 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // The phone's back button/gesture pops the top screen.
-  useEffect(() => {
-    if (!isMobile || !activeId) return;
-    history.pushState({ chat: activeId }, "");
-    const onPop = () => {
-      const s = useApp.getState();
-      if (s.infoOpen) {
-        useApp.setState({ infoOpen: false });
-        history.pushState({ chat: activeId }, "");
-      } else s.openChat(null);
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [isMobile, activeId]);
+  // Each phone screen is a layer in the history stack: back closes exactly the top one.
+  useLayer(isMobile && !!activeId, () => {
+    // The system swipe already slid the screen away; don't play our exit on top of it.
+    if (backWasSystemGesture()) swiped.current = true;
+    useApp.getState().openChat(null);
+  });
+  useLayer(isMobile && !!activeId && infoOpen, () => useApp.setState({ infoOpen: false }));
+  const callFull =
+    isMobile &&
+    !callMin &&
+    (callPhase === "outgoing" || callPhase === "connecting" || callPhase === "active");
+  useLayer(callFull, () => useCall.getState().setMinimized(true));
 
   useEffect(() => {
     if (activeId && !chat) useApp.getState().openChat(null);
@@ -463,9 +495,11 @@ export function AppShell() {
         )}
         <TabCapsule hidden={!!chat} />
         <OfflineBanner />
+        <UpdateBanner />
         <DeepLinks />
         <InstallGuide />
         {callPhase !== "idle" && <CallView />}
+        <CallPipWindow />
       </div>
     );
   }
@@ -487,7 +521,17 @@ export function AppShell() {
   else center = <Welcome />;
 
   let side: React.ReactNode = null;
-  if (chat && !inCall && section !== "settings") {
+  if (inCall && callChatOpen && callChat) {
+    // Chat with the same person beside the call; nothing else closes.
+    side = (
+      <Conversation
+        key={`call-${callChat.id}`}
+        chat={callChat}
+        filesHidden
+        onShowFiles={() => {}}
+      />
+    );
+  } else if (chat && !inCall && section !== "settings") {
     if (showInfo) side = <InfoPanel chat={showInfo} />;
     else if (sideOpen)
       side = (
@@ -504,17 +548,28 @@ export function AppShell() {
         {side && !wide && (
           <div
             className="side-scrim"
-            onClick={() => (showInfo ? useApp.setState({ infoOpen: false }) : setPeek(false))}
+            onClick={() =>
+              inCall && callChatOpen
+                ? useCall.getState().setChatOpen(false)
+                : showInfo
+                  ? useApp.setState({ infoOpen: false })
+                  : setPeek(false)
+            }
           />
         )}
         {side && (
-          <aside className="col-side" key={showInfo ? "info" : "files"}>
+          <aside
+            className="col-side"
+            key={inCall && callChatOpen ? "call-chat" : showInfo ? "info" : "files"}
+          >
             {side}
           </aside>
         )}
       </div>
       {callPhase !== "idle" && callMin && <CallView />}
+      <CallPipWindow />
       <OfflineBanner />
+      <UpdateBanner />
       <DeepLinks />
       <InstallGuide />
     </div>

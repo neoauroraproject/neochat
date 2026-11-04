@@ -27,7 +27,15 @@ type Call struct {
 	caller     *Client
 	callee     *Client
 	timer      *time.Timer
+	// A side whose connection dropped keeps its place for callGrace; these end the call if it never returns.
+	callerAway *time.Timer
+	calleeAway *time.Timer
 }
+
+// callGrace is how long a call waits for a participant whose connection dropped, e.g. a phone
+// moving from Wi-Fi to mobile data or an iPhone user glancing at another app. Media often keeps
+// flowing peer-to-peer meanwhile; only the signaling socket was lost.
+var callGrace = 30 * time.Second
 
 type CallManager struct {
 	s      *Server
@@ -173,7 +181,9 @@ func (m *CallManager) accept(c *Client, callID string) {
 	caller := call.caller
 	m.mu.Unlock()
 
-	caller.push(encodeEvent("call_accepted", map[string]string{"callId": callID}))
+	if caller != nil {
+		caller.push(encodeEvent("call_accepted", map[string]string{"callId": callID}))
+	}
 	// Stop the ringing on the callee's other devices.
 	b := encodeEvent("call_handled", map[string]string{"callId": callID})
 	m.s.hub.mu.RLock()
@@ -217,8 +227,10 @@ func (m *CallManager) finish(callID string, by int64, reason string) {
 	delete(m.calls, callID)
 	delete(m.byUser, call.CallerID)
 	delete(m.byUser, call.CalleeID)
-	if call.timer != nil {
-		call.timer.Stop()
+	for _, t := range []*time.Timer{call.timer, call.callerAway, call.calleeAway} {
+		if t != nil {
+			t.Stop()
+		}
 	}
 	m.mu.Unlock()
 
@@ -236,16 +248,68 @@ func (m *CallManager) finish(callID string, by int64, reason string) {
 	m.s.logCall(call, status)
 }
 
+// clientGone keeps the call alive for callGrace when a participant's socket closes. Hanging up
+// is always explicit (call_end); a lost connection is usually a network switch, not a goodbye.
 func (m *CallManager) clientGone(c *Client) {
 	m.mu.Lock()
 	call := m.byUser[c.userID]
-	var id string
-	if call != nil && (call.caller == c || call.callee == c) {
-		id = call.ID
+	if call == nil || (call.caller != c && call.callee != c) {
+		m.mu.Unlock()
+		return
+	}
+	id, uid := call.ID, c.userID
+	expire := func() { m.finish(id, uid, "ended") }
+	var peer *Client
+	if call.caller == c {
+		call.caller, peer = nil, call.callee
+		call.callerAway = time.AfterFunc(callGrace, expire)
+	} else {
+		call.callee, peer = nil, call.caller
+		call.calleeAway = time.AfterFunc(callGrace, expire)
 	}
 	m.mu.Unlock()
-	if id != "" {
-		m.finish(id, c.userID, "ended")
+	if peer != nil {
+		peer.push(encodeEvent("call_peer_away", map[string]string{"callId": id}))
+	}
+}
+
+// reattach puts a participant who reconnected within the grace period back into their call.
+// The new connection learns the call's state; the other side is told so it can restart ICE.
+func (m *CallManager) reattach(c *Client) {
+	m.mu.Lock()
+	call := m.byUser[c.userID]
+	if call == nil {
+		m.mu.Unlock()
+		return
+	}
+	var peer *Client
+	var peerID int64
+	switch {
+	case call.CallerID == c.userID && call.caller == nil:
+		call.caller, peer, peerID = c, call.callee, call.CalleeID
+		if call.callerAway != nil {
+			call.callerAway.Stop()
+			call.callerAway = nil
+		}
+	case call.CalleeID == c.userID && call.Status == "active" && call.callee == nil:
+		call.callee, peer, peerID = c, call.caller, call.CallerID
+		if call.calleeAway != nil {
+			call.calleeAway.Stop()
+			call.calleeAway = nil
+		}
+	default:
+		m.mu.Unlock()
+		return
+	}
+	ev := map[string]any{"callId": call.ID, "chatId": call.ChatID, "status": call.Status, "video": call.Video,
+		"caller": call.CallerID == c.userID, "answeredAt": call.AnsweredAt}
+	m.mu.Unlock()
+	if p, err := m.s.userByID(peerID); err == nil {
+		ev["peer"] = m.s.public(p, c.userID)
+	}
+	c.push(encodeEvent("call_resume", ev))
+	if peer != nil {
+		peer.push(encodeEvent("call_peer_back", map[string]string{"callId": call.ID}))
 	}
 }
 

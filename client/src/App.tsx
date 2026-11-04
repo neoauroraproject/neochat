@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { get, getToken, mediaUrl, setToken, setUnauthorizedHandler } from "./api";
 import { AppShell } from "./app/AppShell";
+import { useAppearance } from "./appearance";
+import { LockScreen } from "./app/LockScreen";
 import { useMedia } from "./app/hooks";
 import { AuthScreen, SetupScreen } from "./auth/AuthScreens";
 import { ActionSheet } from "./components/sheet";
@@ -17,6 +19,7 @@ function useDocumentTheme() {
   const config = useApp((s) => s.config);
   const lang = useApp((s) => s.lang);
   const theme = useApp((s) => s.theme);
+  const userAccent = useAppearance((s) => s.accent);
   const prefersLight = useMedia("(prefers-color-scheme: light)");
   const resolved = theme === "auto" ? (prefersLight ? "light" : "dark") : theme || "light";
   useEffect(() => {
@@ -24,12 +27,14 @@ function useDocumentTheme() {
     root.lang = lang || "fa";
     root.dir = lang === "en" ? "ltr" : "rtl";
     root.dataset.theme = resolved;
-    if (config?.accentColor) root.style.setProperty("--accent", config.accentColor);
+    // A color picked in Settings → Appearance wins over the server's brand color on this device.
+    const accent = userAccent || config?.accentColor;
+    if (accent) root.style.setProperty("--accent", accent);
     if (config?.appName) document.title = config.appName;
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", resolved === "light" ? "#dcdfe6" : "#0c0d10");
-  }, [config, lang, resolved]);
+  }, [config, lang, resolved, userAccent]);
 }
 
 function Scene() {
@@ -127,7 +132,12 @@ export default function App() {
       </Suspense>
     );
   } else {
-    body = <AppShell />;
+    body = (
+      <>
+        <AppShell />
+        <LockScreen />
+      </>
+    );
   }
 
   return (

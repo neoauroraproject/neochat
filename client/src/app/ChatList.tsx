@@ -15,10 +15,12 @@ import {
 import { chatTitle, listStamp, num, preview } from "../format";
 import { useT } from "../i18n";
 import { sortedChats, useApp, type Filter } from "../store";
-import type { Ad, Chat, RoomPreview, User } from "../types";
+import { searchMessages } from "../localdb";
+import type { Ad, Chat, Message, RoomPreview, User } from "../types";
 import { useContacts, useMobile, useTick } from "./hooks";
 import { askRemoveChat } from "./chatActions";
 import { useNewMenu } from "./NewMenu";
+import { MobileHeader, RoundButton } from "./MobileHeader";
 import { RoomPreviewModal } from "./RoomPreviewModal";
 
 export function matchesFilter(c: Chat, f: Filter) {
@@ -85,6 +87,7 @@ export function ChatList() {
   const filter = useApp((s) => s.filter);
   const loaded = useApp((s) => s.chatsLoaded);
   const [q, setQ] = useState("");
+  const [searching, setSearching] = useState(false);
   const newMenu = useNewMenu();
   const isMobile = useMobile();
   const { collapsed, onScroll } = useLargeTitle();
@@ -106,16 +109,6 @@ export function ChatList() {
     : [];
 
   const title = filter === "archive" ? t("nav.archive") : t("nav.chats");
-  const me = useApp((s) => s.me);
-  const compose = (
-    <button
-      className="glass-circle"
-      onClick={(e) => newMenu.open(e.currentTarget)}
-      aria-label={t("list.newChat")}
-    >
-      <Icon name="edit" size={20} />
-    </button>
-  );
 
   const rows = (
     <>
@@ -172,29 +165,51 @@ export function ChatList() {
     );
   }
 
+  const closeSearch = () => {
+    setQ("");
+    setSearching(false);
+  };
   return (
     <div className={`screen list-screen${collapsed ? " collapsed" : ""}`}>
-      <header className="m-top">
-        {filter === "archive" ? (
-          <button className="glass-circle" onClick={() => useApp.setState({ filter: "all" })}>
-            <Icon name="back" size={22} className="flip-rtl" />
-          </button>
-        ) : (
-          <button
-            className="glass-circle avatar-btn"
-            onClick={() => useApp.setState({ section: "settings" })}
-            aria-label={t("nav.settings")}
-          >
-            {me && <Avatar id={me.id} name={me.displayName} media={me.avatar} size={38} />}
-          </button>
-        )}
-        <div className="m-title">{title}</div>
-        {compose}
-      </header>
+      <MobileHeader
+        title={title}
+        leading={
+          filter === "archive" ? (
+            <button
+              className="m-back"
+              onClick={() => useApp.setState({ filter: "all" })}
+              aria-label={t("common.back")}
+            >
+              <Icon name="back" size={22} className="flip-rtl" />
+            </button>
+          ) : undefined
+        }
+        actions={
+          <>
+            <RoundButton
+              icon="search"
+              label={t("common.search")}
+              active={searching}
+              onClick={() => (searching ? closeSearch() : setSearching(true))}
+            />
+            <RoundButton
+              icon="plus"
+              solid
+              label={t("list.newChat")}
+              onClick={(e) => newMenu.open(e.currentTarget)}
+            />
+          </>
+        }
+      />
       <div className="screen-scroll" onScroll={onScroll}>
-        <div className="search-row">
-          <SearchField value={q} onChange={setQ} placeholder={t("list.search")} />
-        </div>
+        {(searching || q) && (
+          <div className="search-row m-search">
+            <SearchField value={q} onChange={setQ} placeholder={t("list.search")} autoFocus />
+            <button className="m-cancel" onClick={closeSearch}>
+              {t("common.cancel")}
+            </button>
+          </div>
+        )}
         {!query && <FolderTabs />}
         {query ? (
           <SearchResults query={query} local={local} />
@@ -682,7 +697,15 @@ export function SearchResults({ query, local = [] }: { query: string; local?: Ch
   const debounced = useDebounced(query, 250);
   const [res, setRes] = useState<{ users: User[]; rooms: RoomPreview[] } | null>(null);
   const [room, setRoom] = useState<RoomPreview | null>(null);
+  const [found, setFound] = useState<Message[]>([]);
+  const chats = useApp((s) => s.chats);
+  const meId = useApp((s) => s.me?.id);
   const reqId = useRef(0);
+  // Messages are searched in the phone's own copy, so this works without the network.
+  useEffect(() => {
+    if (!meId || debounced.length < 2) return setFound([]);
+    searchMessages(meId, debounced).then(setFound);
+  }, [debounced, meId]);
   useEffect(() => {
     if (debounced.length < 2) return setRes(null);
     const id = ++reqId.current;
@@ -731,10 +754,59 @@ export function SearchResults({ query, local = [] }: { query: string; local?: Ch
           </div>
         </button>
       ))}
-      {res && !local.length && !people.length && !rooms.length && (
+      {found.length > 0 && <div className="section-label">{t("list.messages")}</div>}
+      {found.map((m) => {
+        const c = chats[m.chatId];
+        if (!c) return null;
+        return (
+          <button
+            key={m.id}
+            className="row person"
+            onClick={() => {
+              useApp.getState().openChat(c.id);
+              useApp.setState({ jumpTo: { chatId: c.id, messageId: m.id } });
+            }}
+          >
+            <Avatar
+              id={c.peer?.id ?? c.id}
+              name={chatTitle(c, lang)}
+              media={c.peer?.avatar || c.avatar}
+              size={42}
+            />
+            <div className="grow">
+              <div className="title">
+                {chatTitle(c, lang)}
+                <span className="muted" style={{ float: "inline-end", fontSize: 12 }}>
+                  {listStamp(m.createdAt, lang)}
+                </span>
+              </div>
+              <div className="sub">
+                <Highlight text={m.text} q={debounced} />
+              </div>
+            </div>
+          </button>
+        );
+      })}
+      {res && !local.length && !people.length && !rooms.length && !found.length && (
         <Empty icon="search" title={t("list.noResults")} />
       )}
       {room && <RoomPreviewModal room={room} onClose={() => setRoom(null)} />}
     </div>
+  );
+}
+
+/** The matched words in bold, with a little context around them. */
+function Highlight({ text, q }: { text: string; q: string }) {
+  const i = text.toLowerCase().indexOf(q.trim().toLowerCase());
+  if (i < 0) return <>{text.slice(0, 80)}</>;
+  const start = Math.max(0, i - 24);
+  const n = q.trim().length;
+  return (
+    <>
+      {start > 0 && "…"}
+      {text.slice(start, i)}
+      <b>{text.slice(i, i + n)}</b>
+      {text.slice(i + n, i + n + 60)}
+    </>
   );
 }

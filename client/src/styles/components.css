@@ -258,7 +258,6 @@
     0 3px 1px rgba(0, 0, 0, 0.04);
 }
 
-
 /* ---------- Avatar ---------- */
 .avatar {
   position: relative;
@@ -707,4 +706,44 @@
 .menu-overlay {
   background: transparent;
   animation: fade-in 160ms ease;
+}
+
+/* send preview: "send without compression" switch above the caption */
+.mp-original {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 4px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.mp-original span {
+  display: flex;
+  flex-direction: column;
+}
+.mp-original small {
+  font-size: 12px;
+  color: var(--label-2);
+}
+.modal-foot:has(> .mp-original) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.mp-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 4px 10px;
+  font-size: 12.5px;
+  color: var(--label-2);
+}
+.mp-note.danger {
+  color: var(--danger);
+  font-weight: 500;
+}
+.modal-foot:has(> .mp-note) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
 }

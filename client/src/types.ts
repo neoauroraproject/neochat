@@ -23,6 +23,14 @@ export interface Media {
   width?: number;
   height?: number;
   hasThumb?: boolean;
+  /** When the file leaves the server (0/absent = never); expired = it already has. */
+  expiresAt?: number;
+  expired?: boolean;
+}
+
+export interface Reaction {
+  emoji: string;
+  users: number[];
 }
 
 export interface Message {
@@ -30,7 +38,7 @@ export interface Message {
   chatId: number;
   senderId: number;
   sender: { id: number; username: string; displayName: string; avatar: string };
-  kind: "text" | "image" | "video" | "audio" | "voice" | "file" | "system" | "call";
+  kind: "text" | "image" | "video" | "audio" | "voice" | "file" | "system" | "call" | "locked";
   text: string;
   media?: Media;
   replyTo?: number;
@@ -38,6 +46,14 @@ export interface Message {
   editedAt?: number;
   createdAt: number;
   clientId?: string;
+  /** Self-destruct: seconds after being seen; destroyAt once the countdown started. */
+  ttl?: number;
+  destroyAt?: number;
+  /** View-once: 1 = not opened yet, 2 = opened (the file is gone). */
+  once?: 1 | 2;
+  /** "Forwarded from …" */
+  fwdName?: string;
+  reactions?: Reaction[];
   // client-only state for optimistic sends
   pending?: boolean;
   failed?: boolean;
@@ -66,6 +82,8 @@ export interface Chat {
   othersReadId: number;
   unread: number;
   memberCount: number;
+  /** Self-destruct timer for new messages in this chat, seconds (0 = off). */
+  ttl?: number;
   peer?: User;
   lastMessage?: Message;
   saved?: boolean;
@@ -89,10 +107,14 @@ export interface PublicConfig {
   maxMessageLen: number;
   clientCacheMessages: number;
   mediaCacheDays: number;
+  largeFileMB: number;
+  largeFileDays: number;
+  mediaRetentionDays: number;
   callsEnabled: boolean;
   videoCallsEnabled: boolean;
   adsEnabled: boolean;
   adsChannelEvery: number;
+  reactionEmojis: string[];
   setupRequired: boolean;
   version: string;
   copyright: string;

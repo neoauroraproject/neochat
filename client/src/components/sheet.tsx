@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { createPortal } from "react-dom";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useDragDismiss } from "./dragDismiss";
+import { useLayer } from "../app/nav";
 import { useT } from "../i18n";
 
 export interface SheetAction {
@@ -43,6 +45,9 @@ export function confirmAction(cfg: {
 export function ActionSheet() {
   const t = useT();
   const { open, title, message, actions, close } = useSheet();
+  useLayer(open, close);
+  const sheetEl = useRef<HTMLDivElement>(null);
+  const drag = useDragDismiss({ target: () => sheetEl.current, onClose: close });
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
@@ -55,7 +60,7 @@ export function ActionSheet() {
       className="overlay sheet-overlay action-overlay"
       onPointerDown={(e) => e.target === e.currentTarget && close()}
     >
-      <div className="action-sheet" role="alertdialog" aria-label={title}>
+      <div className="action-sheet" role="alertdialog" aria-label={title} ref={sheetEl} {...drag}>
         <div className="as-group">
           {(title || message) && (
             <div className="as-head">

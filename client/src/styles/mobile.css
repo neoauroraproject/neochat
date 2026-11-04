@@ -269,3 +269,1254 @@
 .phone .tab-screen .settings-pane {
   padding: 0;
 }
+
+/* =====================================================================
+   Phone, native look (2026-11): monochrome iOS-style list screens.
+   A large title with round actions, pill segments, airy two-line rows
+   with a red count, a contacts card grid, and a floating black tab bar
+   whose active tab opens into a pill with its name. Desktop untouched:
+   everything here is scoped to .phone.
+   ===================================================================== */
+.phone {
+  --m-bg: #f7f7f8;
+  --m-card: #ffffff;
+  --m-ink: #0c0c0d;
+  --m-sub: #6e6e73;
+  --m-faint: #9d9da3;
+  --m-line: rgba(12, 12, 13, 0.07);
+  --m-press: rgba(12, 12, 13, 0.04);
+  --m-round: #ffffff;
+  --m-round-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 22px rgba(0, 0, 0, 0.05);
+  --m-solid: #0c0c0d;
+  --m-solid-ink: #ffffff;
+  --m-bar: #0c0c0d;
+  --m-bar-active: #2c2c2f;
+  --m-bar-ink: #ffffff;
+  --m-badge: #ef3b35;
+  --m-online: #22c55e;
+  --m-segment: rgba(12, 12, 13, 0.045);
+  --m-chat: #f1f1f3;
+  /* the conversation follows the same black and white */
+  --bubble-out: #111113;
+  --bubble-out-ink: #ffffff;
+  --bubble-in: #ffffff;
+  --bubble-in-ink: #0c0c0d;
+  --panel: var(--m-chat);
+  --panel-head: rgba(247, 247, 248, 0.88);
+  --surface: var(--m-bg);
+  background: var(--m-bg);
+  color: var(--m-ink);
+}
+:root[data-theme="dark"] .phone {
+  --m-bg: #000000;
+  --m-card: #141416;
+  --m-ink: #f5f5f7;
+  --m-sub: #98989f;
+  --m-faint: #6c6c72;
+  --m-line: rgba(255, 255, 255, 0.08);
+  --m-press: rgba(255, 255, 255, 0.06);
+  --m-round: #1c1c1f;
+  --m-round-shadow: none;
+  --m-solid: #f5f5f7;
+  --m-solid-ink: #000000;
+  --m-bar: #1c1c1f;
+  --m-bar-active: #3a3a3d;
+  --m-segment: rgba(255, 255, 255, 0.07);
+  --m-chat: #0a0a0b;
+  --bubble-out: #f5f5f7;
+  --bubble-out-ink: #000000;
+  --bubble-in: #1c1c1f;
+  --bubble-in-ink: #f5f5f7;
+  --panel-head: rgba(0, 0, 0, 0.82);
+}
+.phone .phone-glass,
+.phone .tab-screen {
+  background: var(--m-bg);
+}
+.phone .tab-screen {
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 20px 0;
+}
+/* the list fades out under the floating tab bar */
+.phone .tab-screen::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset-inline: 0;
+  bottom: 0;
+  height: calc(130px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to bottom, transparent, var(--m-bg) 72%);
+  pointer-events: none;
+}
+.phone .tab-screen .screen-scroll {
+  margin: 0 -20px;
+  padding: 0 20px calc(120px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---------- header ---------- */
+.m-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 0 14px;
+  flex-shrink: 0;
+}
+.m-head-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.m-head h1 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--m-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.m-head-middle {
+  flex-shrink: 0;
+}
+.m-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.m-round,
+.m-back {
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--m-ink);
+  background: var(--m-round);
+  box-shadow: var(--m-round-shadow);
+  transition:
+    transform 140ms var(--ease-out),
+    background-color 160ms ease;
+}
+.m-back {
+  width: 42px;
+  height: 42px;
+}
+.m-round:active,
+.m-back:active {
+  transform: scale(0.92);
+}
+.m-round.solid {
+  color: var(--m-solid-ink);
+  background: var(--m-solid);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+.m-round.active {
+  color: var(--m-solid-ink);
+  background: var(--m-solid);
+}
+
+/* search opens under the header */
+.m-search {
+  padding-bottom: 12px;
+  animation: m-drop 260ms var(--ease-out);
+}
+.phone .search input {
+  height: 46px;
+  border-radius: 16px;
+  font-size: 16px;
+  background: var(--m-card);
+  box-shadow: var(--m-round-shadow);
+}
+.m-cancel {
+  flex-shrink: 0;
+  font-size: 16px;
+  color: var(--m-ink);
+  padding: 0 2px;
+}
+@keyframes m-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* ---------- pill segments (calls filter, chat folders) ---------- */
+.m-pill,
+.phone .folder-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--m-segment);
+}
+.m-pill button {
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 16px;
+  color: var(--m-sub);
+  white-space: nowrap;
+  transition:
+    color 180ms ease,
+    background-color 220ms ease,
+    box-shadow 220ms ease;
+}
+.m-pill button[aria-selected="true"] {
+  color: var(--m-ink);
+  background: var(--m-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.phone .folder-tabs {
+  display: flex;
+  margin-bottom: 14px;
+}
+.phone .folder-tabs button {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 450;
+  color: var(--m-sub);
+}
+.phone .folder-tabs button[aria-selected="true"] {
+  color: var(--m-ink);
+  font-weight: 500;
+}
+.phone .folder-tabs .ink {
+  top: 4px;
+  bottom: 4px;
+  border-radius: 999px;
+  background: var(--m-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.phone .folder-tabs .badge,
+.phone .folder-tabs button:not([aria-selected="true"]) .badge {
+  background: var(--m-badge);
+  border-radius: 6px;
+}
+
+/* ---------- people strip ---------- */
+.phone .stories {
+  gap: 16px;
+  padding: 2px 0 16px;
+}
+.phone .story .name {
+  font-size: 12.5px;
+  color: var(--m-sub);
+}
+
+/* ---------- rows ---------- */
+.phone .cells {
+  gap: 0;
+}
+.phone .cell-wrap {
+  border-radius: 0;
+}
+.phone .chat-cell {
+  align-items: flex-start;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px 0;
+  border-radius: 0;
+  background: var(--m-bg);
+}
+.phone .chat-cell::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  inset-inline-start: 68px;
+  inset-inline-end: 0;
+  height: 1px;
+  background: var(--m-line);
+}
+.phone .cell-wrap:last-child .chat-cell::after {
+  display: none;
+}
+.phone .chat-cell:active,
+.phone .chat-cell[aria-current="true"] {
+  background: var(--m-bg);
+}
+.phone .chat-cell:active .cell-body {
+  opacity: 0.6;
+}
+.phone .cell-body {
+  gap: 4px;
+  padding-top: 2px;
+}
+.phone .line1 .title {
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--m-ink);
+}
+.phone .line1 .time {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--m-faint);
+}
+.phone .line1 .kind {
+  color: var(--m-faint);
+}
+.phone .line2 {
+  align-items: flex-start;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--m-sub);
+}
+.phone .cell-wrap:not(.compact) .line2 .sub {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.phone .chat-cell.unread .line2 .sub {
+  color: var(--m-ink);
+}
+.phone .trail {
+  padding-top: 8px;
+}
+.phone .trail .badge,
+.phone .capsule .badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--m-badge);
+}
+.phone .trail .badge.muted {
+  background: var(--m-faint);
+}
+.phone .trail .tick.read {
+  color: var(--m-ink);
+}
+.phone .avatar .dot {
+  background: var(--m-online);
+  box-shadow: 0 0 0 2.5px var(--m-bg);
+}
+
+/* calls */
+.phone .call-cell {
+  align-items: center;
+}
+.phone .call-cell .cell-body {
+  padding-top: 0;
+}
+.phone .call-cell .line2 {
+  align-items: center;
+}
+.call-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.call-dir.missed {
+  color: var(--m-badge, var(--danger));
+}
+.phone .call-cell .call-again {
+  width: 46px;
+  height: 46px;
+  margin-top: -28px;
+  border-radius: 50%;
+  color: var(--m-ink);
+  background: var(--m-round);
+  box-shadow: var(--m-round-shadow);
+}
+.phone .call-cell .line1 .time {
+  margin-inline-end: 58px;
+}
+
+/* contacts: a two-column card grid */
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding-top: 4px;
+}
+.contact-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 26px 10px 22px;
+  border-radius: 28px;
+  background: var(--m-card);
+  box-shadow: var(--m-round-shadow);
+  transition: transform 140ms var(--ease-out);
+}
+.contact-card:active {
+  transform: scale(0.97);
+}
+.contact-card b {
+  max-width: 100%;
+  margin-top: 8px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--m-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.contact-card span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  font-size: 14.5px;
+  color: var(--m-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.contact-card span i {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--m-online);
+}
+.phone .search-wrap {
+  padding-bottom: 14px;
+}
+.phone .screen-hint {
+  color: var(--m-sub);
+}
+
+/* grouped screens (settings) */
+.phone .card-group {
+  background: var(--m-card);
+  border-radius: 22px;
+  box-shadow: var(--m-round-shadow);
+}
+.phone .section-label {
+  color: var(--m-sub);
+  font-weight: 450;
+}
+
+/* ---------- floating black tab bar ---------- */
+.phone .capsule {
+  left: 16px;
+  right: 16px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  height: 78px;
+  padding: 9px;
+  gap: 0;
+  justify-content: space-between;
+  border-radius: 40px;
+  transform: none;
+  background: var(--m-bar);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+}
+.phone .capsule.away {
+  transform: translateY(170%);
+}
+.phone .capsule button {
+  flex: 1 1 0;
+  min-width: 60px;
+  width: auto;
+  height: 60px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--m-bar-ink);
+  opacity: 0.92;
+}
+.phone .capsule button[aria-current="true"] {
+  flex: 0 0 auto;
+  padding: 0 22px;
+  color: var(--m-bar-ink);
+  opacity: 1;
+}
+.phone .capsule .tab-label {
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  animation: m-label-in 260ms var(--ease-out);
+}
+@keyframes m-label-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+.phone .capsule .lens {
+  top: 9px;
+  height: 60px;
+  border-radius: 30px;
+  background: var(--m-bar-active);
+}
+.phone .capsule .badge {
+  top: 8px;
+  inset-inline-start: calc(50% + 6px);
+  box-shadow: 0 0 0 2.5px var(--m-bar);
+}
+.phone .capsule button[aria-current="true"] .badge {
+  inset-inline-start: 34px;
+}
+
+/* ---------- conversation ---------- */
+.phone .conv-head {
+  background: var(--panel-head);
+  box-shadow: 0 1px 0 var(--m-line);
+}
+.phone .conv-head .glass-circle,
+.phone .conv-head > .icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  color: var(--m-ink);
+  background: var(--m-round);
+  box-shadow: var(--m-round-shadow);
+}
+.phone .conv-head .who .title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--m-ink);
+}
+.phone .bubble {
+  border-radius: 20px;
+}
+.phone .msg.out .bubble .stamp .read {
+  color: var(--bubble-out-ink);
+}
+.phone .msg.out .bubble a,
+.phone .msg.out .bubble .mention {
+  color: inherit;
+  text-decoration: underline;
+}
+.phone .field-pill {
+  border-radius: 26px;
+  background: var(--m-card);
+  box-shadow: var(--m-round-shadow);
+}
+.phone .field-pill .send {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--m-solid-ink);
+  background: var(--m-solid);
+  box-shadow: none;
+}
+.phone .sys-msg {
+  color: var(--m-sub);
+}
+.phone .pinned-bar,
+.phone .select-bar {
+  background: var(--m-bg);
+}
+.phone .pinned-bar b,
+.phone .pin-rail i.on {
+  color: var(--m-ink);
+}
+.phone .pin-rail i.on {
+  background: var(--m-ink);
+}
+.phone .pin-rail i {
+  background: var(--m-line);
+}
+.phone .info-pane,
+.phone .settings-pane {
+  background: var(--m-bg);
+}
+
+/* the title never truncates: the segmented control gives way instead */
+.m-head-title {
+  flex: 1 0 auto;
+}
+.m-head h1 {
+  overflow: visible;
+}
+.m-head-middle {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.m-head-middle .m-pill {
+  max-width: 100%;
+}
+.m-head-middle .m-pill button {
+  height: 40px;
+  padding: 0 14px;
+  font-size: 15px;
+}
+.phone .empty-icon {
+  color: var(--m-ink);
+  background: var(--m-segment);
+}
+.phone .empty h3 {
+  color: var(--m-ink);
+  font-weight: 500;
+}
+.contact-card span {
+  white-space: normal;
+  justify-content: center;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+.phone .avatar-edit .icon-btn.accent {
+  color: var(--m-solid-ink);
+  background: var(--m-solid);
+  box-shadow: 0 0 0 3px var(--m-bg);
+}
+.phone .me-card {
+  padding-bottom: 6px;
+}
+/* file, lock and view-once icons inside an outgoing (black) bubble */
+.phone .msg.out .file-box .fi,
+.phone .msg.out .locked-icon,
+.phone .msg.out .once-icon {
+  color: var(--bubble-out-ink);
+  background: color-mix(in srgb, var(--bubble-out-ink) 14%, transparent);
+}
+.phone .msg.out .file-box .fi .ring {
+  background: conic-gradient(var(--bubble-out-ink) calc(var(--p) * 1turn), transparent 0);
+}
+.phone .msg.in .file-box .fi {
+  color: var(--m-ink);
+  background: var(--m-segment);
+}
+
+/* =====================================================================
+   Phone, round two: softer blacks and whites with real depth, the chat
+   header and two-row composer, the photo profile, the profile-style
+   settings and the QR sheet.
+   ===================================================================== */
+.send-label {
+  display: none;
+}
+
+/* ---------- depth: the dark controls get a gentle gradient and highlight ---------- */
+.phone .capsule {
+  background: linear-gradient(180deg, var(--m-solid-2), var(--m-bar));
+  box-shadow:
+    var(--m-shadow-lg),
+    0 1px 0 rgba(255, 255, 255, 0.07) inset;
+}
+.phone .capsule .lens {
+  background: var(--m-bar-active);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+:root[data-theme="dark"] .phone .capsule {
+  background: linear-gradient(180deg, #2a2a30, var(--m-bar));
+}
+.m-round.solid,
+.m-round.active,
+.phone .field-pill .send,
+.pf-edit,
+.qr-share {
+  background: linear-gradient(180deg, var(--m-solid-2), var(--m-solid));
+  color: var(--m-solid-ink);
+  box-shadow:
+    0 8px 20px rgba(20, 20, 26, 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.1) inset;
+}
+:root[data-theme="dark"] .m-round.solid,
+:root[data-theme="dark"] .phone .field-pill .send,
+:root[data-theme="dark"] .pf-edit,
+:root[data-theme="dark"] .qr-share {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+.phone .msg.out .bubble {
+  box-shadow: 0 4px 14px rgba(20, 20, 26, 0.14);
+}
+.phone .msg.in .bubble {
+  box-shadow:
+    0 1px 1px rgba(20, 20, 26, 0.04),
+    0 4px 14px rgba(20, 20, 26, 0.06);
+}
+:root[data-theme="dark"] .phone .msg .bubble {
+  box-shadow: none;
+}
+.phone .bubble {
+  border-radius: 22px;
+  padding: 10px 15px;
+}
+
+/* ---------- chat header: back · name · photo ---------- */
+.phone .m-conv-head {
+  display: grid;
+  grid-template-columns: 44px 1fr 46px;
+  align-items: center;
+  gap: 8px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 10px;
+}
+.phone .m-conv-head .m-back {
+  width: 44px;
+  height: 44px;
+}
+.phone .m-conv-head .who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+}
+.phone .m-conv-head .who .title {
+  max-width: 100%;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone .m-conv-head .status {
+  font-size: 12.5px;
+  color: var(--m-sub);
+}
+.phone .m-conv-head .status.on {
+  color: var(--m-online);
+}
+.m-head-avatar {
+  border-radius: 50%;
+  transition: transform 140ms var(--ease-out);
+}
+.m-head-avatar:active {
+  transform: scale(0.94);
+}
+
+/* ---------- composer: text on top, tools and a "Send" pill below ---------- */
+.phone .composer-wrap {
+  padding: 6px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.phone .field-pill {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  min-height: 0;
+  padding: 10px 10px 8px 12px;
+  border-radius: 26px;
+  background: var(--m-card);
+  box-shadow:
+    0 1px 1px rgba(20, 20, 26, 0.04),
+    0 8px 26px rgba(20, 20, 26, 0.08);
+}
+.phone .field-pill textarea {
+  order: 0;
+  flex: 1 0 100%;
+  min-height: 34px;
+  padding: 6px 6px 4px;
+  font-size: 16.5px;
+  color: var(--m-ink);
+}
+.phone .field-pill .tools {
+  order: 1;
+  flex: 1;
+  height: 42px;
+  gap: 2px;
+}
+.phone .field-pill .tools .icon-btn {
+  width: 40px;
+  height: 40px;
+  color: var(--m-sub);
+}
+.phone .field-pill .send {
+  order: 2;
+  width: auto;
+  height: 42px;
+  margin: 0;
+  padding: 0 18px 0 16px;
+  border-radius: 21px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.phone .field-pill .send-label {
+  display: inline;
+  font-size: 15px;
+  font-weight: 500;
+}
+.phone .composer.recording .field-pill {
+  flex-wrap: nowrap;
+}
+.phone .composer.recording .send .send-label {
+  display: none;
+}
+
+/* ---------- profile (chat info) ---------- */
+.phone .info-pane {
+  padding-top: 0;
+}
+.pf-hero {
+  position: relative;
+  height: min(60vh, 520px);
+  min-height: 380px;
+  margin: 0 -16px;
+  overflow: hidden;
+  border-radius: 0 0 34px 34px;
+  color: #fff;
+  background:
+    radial-gradient(120% 80% at 30% 15%, hsl(var(--pf-h) 55% 78%), transparent 60%),
+    linear-gradient(165deg, hsl(var(--pf-h) 40% 62%), hsl(var(--pf-h) 38% 34%));
+  box-shadow: 0 14px 36px rgba(20, 20, 26, 0.16);
+}
+.pf-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: pf-zoom 900ms var(--ease-out);
+}
+@keyframes pf-zoom {
+  from {
+    transform: scale(1.06);
+  }
+}
+.pf-initials {
+  position: absolute;
+  inset: 0 0 34%;
+  display: grid;
+  place-items: center;
+  font-size: 112px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+.pf-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.28) 0,
+    transparent 22%,
+    transparent 42%,
+    rgba(0, 0, 0, 0.62) 100%
+  );
+}
+.pf-top {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  inset-inline: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+.pf-glass {
+  height: 44px;
+  min-width: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+.pf-glass.pill {
+  padding: 0 18px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.pf-bottom {
+  position: absolute;
+  inset-inline: 18px;
+  bottom: 22px;
+  text-align: center;
+}
+.pf-bottom h2 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
+}
+.pf-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.pf-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--m-online);
+  box-shadow: 0 0 0 3px rgba(46, 194, 126, 0.25);
+}
+.pf-actions {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 18px;
+}
+.pf-act {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 56px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.92);
+}
+.pf-act span {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #1d1d21;
+  background: rgba(251, 251, 252, 0.94);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  transition: transform 140ms var(--ease-out);
+}
+.pf-act:active span {
+  transform: scale(0.92);
+}
+.phone .info-body {
+  padding-top: 18px;
+}
+.phone .info-pane .card-group > .item .muted {
+  color: var(--m-sub);
+}
+.pf-media {
+  margin-bottom: 22px;
+}
+.pf-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: var(--m-segment);
+}
+.pf-tabs button {
+  flex: 1;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 999px;
+  font-size: 15px;
+  color: var(--m-sub);
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+.pf-tabs button[aria-selected="true"] {
+  color: var(--m-ink);
+  background: var(--m-card);
+  box-shadow: 0 1px 3px rgba(20, 20, 26, 0.1);
+}
+.pf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.pf-grid button {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--m-segment);
+}
+.pf-grid img,
+.pf-grid video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pf-play {
+  position: absolute;
+  inset-block-end: 6px;
+  inset-inline-start: 6px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+}
+.pf-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--m-line);
+  text-align: start;
+  color: var(--m-ink);
+}
+.pf-row-ic {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--m-segment);
+}
+.pf-row .grow {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pf-row b {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: start;
+}
+.pf-row span span {
+  font-size: 13px;
+  color: var(--m-sub);
+}
+.pf-empty {
+  display: grid;
+  place-items: center;
+  min-height: 90px;
+  font-size: 14px;
+  color: var(--m-sub);
+}
+
+/* ---------- settings as a profile ---------- */
+.pf-me {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: calc(4px + env(safe-area-inset-top, 0px));
+}
+.pf-me-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.pf-edit {
+  height: 42px;
+  padding: 0 22px;
+  border-radius: 21px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.pf-me .avatar-edit {
+  filter: drop-shadow(0 12px 24px rgba(20, 20, 26, 0.14));
+}
+.pf-me h2 {
+  margin: 18px 0 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--m-ink);
+  text-align: center;
+}
+.pf-me-sub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--m-sub);
+  text-align: center;
+}
+.pf-me-bio {
+  max-width: 300px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.pf-links {
+  width: 100%;
+  margin-top: 24px;
+}
+.pf-links > .item {
+  min-height: 60px;
+  gap: 14px;
+  font-size: 16px;
+}
+.pf-ic {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(20, 20, 26, 0.14);
+}
+.pf-links > .item + .item::before {
+  inset-inline-start: 66px;
+}
+.pf-links .chev {
+  color: var(--m-faint);
+}
+.phone .settings-pane .item-icon {
+  border-radius: 50%;
+}
+
+/* ---------- QR sheet ---------- */
+.qr-sheet {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+.qr-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 22px 22px;
+  border-radius: 32px;
+  box-shadow: var(--m-shadow-lg);
+}
+.qr-stage[data-qr="default"],
+.qr-theme[data-qr="default"] span {
+  background:
+    radial-gradient(120% 70% at 20% 0%, rgba(255, 255, 255, 0.1), transparent 55%),
+    linear-gradient(165deg, #34343b, #1f1f24);
+}
+.qr-stage[data-qr="feather"],
+.qr-theme[data-qr="feather"] span {
+  background:
+    radial-gradient(60% 50% at 18% 18%, rgba(255, 255, 255, 0.28), transparent 70%),
+    radial-gradient(50% 40% at 85% 80%, rgba(255, 255, 255, 0.14), transparent 70%),
+    linear-gradient(150deg, #2bb5b3, #12606e);
+}
+.qr-stage[data-qr="gold"],
+.qr-theme[data-qr="gold"] span {
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.13) 0 2px, transparent 2px 9px),
+    linear-gradient(160deg, #ecbd62, #a86f1f);
+}
+.qr-stage[data-qr="fresh"],
+.qr-theme[data-qr="fresh"] span {
+  background:
+    radial-gradient(50% 40% at 82% 12%, rgba(255, 255, 255, 0.24), transparent 70%),
+    radial-gradient(40% 35% at 12% 88%, rgba(170, 255, 190, 0.18), transparent 70%),
+    linear-gradient(160deg, #3f8f52, #17402a);
+}
+.qr-paper {
+  position: relative;
+  padding: 14px;
+  border-radius: 24px;
+  color: #1d1d21;
+  background: #fbfbfc;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+}
+.qr-sheet .qr-svg {
+  display: block;
+  width: min(220px, 60vw);
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.qr-face {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  padding: 4px;
+  border-radius: 50%;
+  background: #fbfbfc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.qr-handle {
+  font-size: 21px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+.qr-themes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.qr-theme {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--m-sub);
+}
+.qr-theme span {
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 72px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  color: #fff;
+  box-shadow: var(--m-round-shadow);
+  transition: transform 140ms var(--ease-out);
+}
+.qr-theme:active span {
+  transform: scale(0.95);
+}
+.qr-theme.on {
+  color: var(--m-ink);
+  font-weight: 500;
+}
+.qr-theme.on span {
+  outline: 2.5px solid var(--m-ink);
+  outline-offset: 2px;
+}
+.qr-share {
+  height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 27px;
+  font-size: 16px;
+  font-weight: 500;
+}
+.qr-scan-link {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  font-size: 15px;
+  color: var(--m-ink);
+}
+
+/* ---------- roadmap pieces in the same material ---------- */
+.lock-screen {
+  background: var(--m-bg);
+  color: var(--m-ink);
+}
+.pin-pad button {
+  background: var(--m-card);
+  box-shadow: var(--m-round-shadow);
+}
+.call-float.voice {
+  background: linear-gradient(180deg, #34343b, #232328);
+}
+.phone .contact-card,
+.phone .card-group {
+  box-shadow:
+    0 1px 1px rgba(20, 20, 26, 0.03),
+    0 6px 20px rgba(20, 20, 26, 0.06);
+}
+:root[data-theme="dark"] .phone .contact-card,
+:root[data-theme="dark"] .phone .card-group {
+  box-shadow: none;
+}

@@ -24,7 +24,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var version = "1.5.1"
+var version = "1.6.0"
 
 // defaultAdFeed is the NeoAurora license worker that serves network ads (override with -ad-feed).
 var defaultAdFeed = "https://license.hossein-m466.workers.dev"
@@ -199,6 +199,7 @@ func serve(o Options) error {
 	s.netads = newNetAds(s, o.AdFeed)
 	go s.netads.run()
 	go s.runJobs()
+	go s.runDestroyer()
 
 	srv := &http.Server{
 		Addr:              o.Addr,
@@ -307,6 +308,16 @@ func (s *Server) routes() http.Handler {
 	h("POST /api/invite/{code}", s.authed(s.handleInviteJoin))
 
 	h("POST /api/media", s.authed(s.handleUpload))
+	h("GET /api/me/storage", s.authed(s.handleMyStorage))
+	h("GET /api/sync", s.authed(s.handleSync))
+	h("POST /api/messages/forward", s.authed(s.handleForward))
+	h("PUT /api/messages/{id}/reaction", s.authed(s.handleReaction))
+	h("POST /api/messages/{id}/pin", s.authed(s.handlePin))
+	h("DELETE /api/messages/{id}/pin", s.authed(s.handlePin))
+	h("POST /api/messages/{id}/opened", s.authed(s.handleOpened))
+	h("GET /api/chats/{id}/pins", s.authed(s.handlePins))
+	h("PATCH /api/chats/{id}/ttl", s.authed(s.handleSetTTL))
+	h("DELETE /api/me/media/{id}", s.authed(s.handleDeleteMyMedia))
 	mux.HandleFunc("GET /media/{id}", s.handleServeMedia)
 	mux.HandleFunc("GET /media/{id}/{variant}", s.handleServeMedia)
 
@@ -339,6 +350,9 @@ func (s *Server) routes() http.Handler {
 	h("POST /api/admin/invites", s.admin(s.handleAdminCreateInvite))
 	h("DELETE /api/admin/invites/{code}", s.admin(s.handleAdminDeleteInvite))
 	h("GET /api/admin/backup", s.admin(s.handleAdminBackup))
+	h("GET /api/admin/storage", s.admin(s.handleAdminStorage))
+	h("POST /api/admin/storage/preview", s.admin(s.handleAdminStoragePreview))
+	h("POST /api/admin/storage/cleanup", s.admin(s.handleAdminStorageCleanup))
 	h("GET /api/admin/netads", s.admin(s.handleAdminNetAds))
 	h("GET /api/admin/tls", s.admin(s.tlsAvailable(s.handleAdminTLS)))
 	h("PUT /api/admin/tls", s.admin(s.tlsAvailable(s.handleAdminSaveTLS)))

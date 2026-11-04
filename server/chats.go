@@ -27,6 +27,7 @@ type ChatView struct {
 	OthersRead  int64    `json:"othersReadId"`
 	Unread      int      `json:"unread"`
 	Members     int      `json:"memberCount"`
+	TTL         int      `json:"ttl"` // self-destruct timer for new messages, seconds
 	Peer        *User    `json:"peer,omitempty"`
 	LastMessage *Message `json:"lastMessage,omitempty"`
 	Saved       bool     `json:"saved,omitempty"`
@@ -37,7 +38,8 @@ SELECT c.id, c.type, c.title, COALESCE(c.handle,''), c.description, c.avatar, CO
 	c.created_at, c.last_msg_id, c.last_msg_at, cm.role, cm.muted, cm.archived, cm.pinned, cm.last_read_id,
 	(SELECT COUNT(*) FROM messages m WHERE m.chat_id=c.id AND m.id>cm.last_read_id AND m.sender_id<>cm.user_id),
 	(SELECT COUNT(*) FROM chat_members x WHERE x.chat_id=c.id),
-	(SELECT COALESCE(MAX(x.last_read_id),0) FROM chat_members x WHERE x.chat_id=c.id AND x.user_id<>cm.user_id)
+	(SELECT COALESCE(MAX(x.last_read_id),0) FROM chat_members x WHERE x.chat_id=c.id AND x.user_id<>cm.user_id),
+	c.ttl_seconds
 FROM chat_members cm JOIN chats c ON c.id=cm.chat_id
 WHERE cm.user_id=?`
 
@@ -51,7 +53,7 @@ func (s *Server) scanChatViews(rows *sql.Rows, uid int64) ([]*ChatView, error) {
 		var muted, archived, pinned int
 		if err := rows.Scan(&c.ID, &c.Type, &c.Title, &c.Handle, &c.Description, &c.Avatar, &c.InviteCode, &c.OwnerID,
 			&c.CreatedAt, &lastID, &c.LastMsgAt, &c.Role, &muted, &archived, &pinned, &c.LastReadID,
-			&c.Unread, &c.Members, &c.OthersRead); err != nil {
+			&c.Unread, &c.Members, &c.OthersRead, &c.TTL); err != nil {
 			return nil, err
 		}
 		c.Muted, c.Archived, c.Pinned = muted == 1, archived == 1, pinned == 1
@@ -317,6 +319,7 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request, u *Use
 			return errf(400, "bad_request", "invalid avatar")
 		}
 		avatar = *req.Avatar
+		s.keepMedia(avatar)
 	}
 	members := uniqueIDs(req.Members...)
 	if len(members)+1 > s.cfg().MaxGroupMembers {
@@ -401,6 +404,7 @@ func (s *Server) handleUpdateRoom(w http.ResponseWriter, r *http.Request, u *Use
 		if *req.Avatar != "" && !s.ownsMedia(u.ID, *req.Avatar, "image") {
 			return errf(400, "bad_request", "invalid avatar")
 		}
+		s.keepMedia(*req.Avatar)
 		if _, err := s.db.Exec(`UPDATE chats SET avatar=? WHERE id=?`, *req.Avatar, id); err != nil {
 			return err
 		}
@@ -794,7 +798,10 @@ func (s *Server) handleRead(w http.ResponseWriter, r *http.Request, u *User) err
 	if err != nil {
 		return err
 	}
+	// Seeing a message starts its self-destruct countdown (if the chat has a timer).
+	s.startCountdown(id, u.ID, req.MessageID)
 	if n, _ := res.RowsAffected(); n > 0 {
+		s.logEvent(id, "read", req.MessageID, u.ID, "")
 		ev := map[string]int64{"chatId": id, "userId": u.ID, "messageId": req.MessageID}
 		if typ == "channel" {
 			s.hub.sendTo(u.ID, "read", ev) // sync my other devices only

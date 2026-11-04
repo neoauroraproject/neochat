@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mediaUrl } from "../api";
+import { useLayer } from "../app/nav";
 import { initials } from "../format";
 import { useApp } from "../store";
 import { Icon } from "./Icon";
@@ -73,6 +74,7 @@ export function Modal({
   const t = useApp((s) => s.lang);
   const sheetRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; t: number } | null>(null);
+  useLayer(true, onClose);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -173,14 +175,18 @@ export function Menu({
   y,
   items,
   onClose,
+  header,
 }: {
   x: number;
   y: number;
   items: MenuItem[];
   onClose: () => void;
+  /** Shown above the items, e.g. a message's reaction row. */
+  header?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y, origin: "top left" });
+  useLayer(true, onClose);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -212,6 +218,7 @@ export function Menu({
         style={{ left: pos.left, top: pos.top, transformOrigin: pos.origin }}
         role="menu"
       >
+        {header}
         {items
           .filter((i) => !i.hidden)
           .map((i) => (

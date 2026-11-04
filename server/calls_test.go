@@ -126,3 +126,60 @@ func TestCallFailsForUnreachableUser(t *testing.T) {
 		}
 	}
 }
+
+// A participant whose socket drops (Wi-Fi → mobile data) keeps the call: the other side hears
+// they are away, and a new connection within the grace period resumes it.
+func TestCallSurvivesShortDisconnect(t *testing.T) {
+	s := newCallTestServer(t)
+	caller := &Client{hub: s.hub, userID: 1, send: make(chan []byte, 32)}
+	callee := &Client{hub: s.hub, userID: 2, send: make(chan []byte, 32)}
+	s.hub.add(caller)
+	s.hub.add(callee)
+	s.calls.invite(caller, 2, true, "r3")
+	id := nextEvent(t, caller, "call_created")["callId"].(string)
+	nextEvent(t, callee, "call_incoming")
+	s.calls.accept(callee, id)
+	nextEvent(t, caller, "call_accepted")
+
+	s.calls.clientGone(callee)
+	s.hub.remove(callee)
+	if got := nextEvent(t, caller, "call_peer_away"); got["callId"] != id {
+		t.Fatalf("call_peer_away %v", got)
+	}
+	if s.calls.activeCount() != 1 {
+		t.Fatal("call ended on a dropped socket")
+	}
+
+	again := &Client{hub: s.hub, userID: 2, send: make(chan []byte, 32)}
+	s.hub.add(again)
+	s.calls.reattach(again)
+	resume := nextEvent(t, again, "call_resume")
+	if resume["callId"] != id || resume["status"] != "active" || resume["caller"] != false {
+		t.Fatalf("call_resume %v", resume)
+	}
+	nextEvent(t, caller, "call_peer_back")
+
+	// Signaling flows to the new connection.
+	s.calls.signal(caller, id, json.RawMessage(`{"type":"offer"}`))
+	nextEvent(t, again, "call_signal")
+	s.calls.finish(id, 1, "ended")
+}
+
+func TestCallEndsWhenPeerNeverReturns(t *testing.T) {
+	old := callGrace
+	callGrace = 50 * time.Millisecond
+	defer func() { callGrace = old }()
+	s := newCallTestServer(t)
+	caller := &Client{hub: s.hub, userID: 1, send: make(chan []byte, 32)}
+	callee := &Client{hub: s.hub, userID: 2, send: make(chan []byte, 32)}
+	s.hub.add(caller)
+	s.hub.add(callee)
+	s.calls.invite(caller, 2, false, "r4")
+	id := nextEvent(t, caller, "call_created")["callId"].(string)
+	s.calls.accept(callee, id)
+	s.calls.clientGone(callee)
+	s.hub.remove(callee)
+	if got := nextEvent(t, caller, "call_ended"); got["callId"] != id {
+		t.Fatalf("call_ended %v", got)
+	}
+}

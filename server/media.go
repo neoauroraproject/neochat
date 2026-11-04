@@ -12,6 +12,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +32,10 @@ type Media struct {
 	Width    int    `json:"width,omitempty"`
 	Height   int    `json:"height,omitempty"`
 	HasThumb bool   `json:"hasThumb,omitempty"`
+	// ExpiresAt is when the file leaves the server (0 = never); Expired means it already has.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
+	Expired   bool  `json:"expired,omitempty"`
+	Keep      bool  `json:"-"`
 }
 
 func (s *Server) mediaPath(id string) string {
@@ -42,24 +47,27 @@ func (s *Server) mediaByID(id string) (*Media, error) {
 		return nil, errNotFound
 	}
 	var m Media
-	var thumb int
-	err := s.db.QueryRow(`SELECT id, owner_id, kind, mime, name, size, width, height, has_thumb FROM media WHERE id=?`, id).
-		Scan(&m.ID, &m.OwnerID, &m.Kind, &m.Mime, &m.Name, &m.Size, &m.Width, &m.Height, &thumb)
+	var thumb, removed, keep int
+	err := s.db.QueryRow(`SELECT id, owner_id, kind, mime, name, size, width, height, has_thumb, expires_at, removed, keep FROM media WHERE id=?`, id).
+		Scan(&m.ID, &m.OwnerID, &m.Kind, &m.Mime, &m.Name, &m.Size, &m.Width, &m.Height, &thumb, &m.ExpiresAt, &removed, &keep)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errNotFound
 	}
-	m.HasThumb = thumb == 1
+	m.HasThumb, m.Expired, m.Keep = thumb == 1, removed == 1, keep == 1
 	return &m, err
 }
 
 func (s *Server) ownsMedia(uid int64, id, kind string) bool {
 	m, err := s.mediaByID(id)
-	return err == nil && m.OwnerID == uid && (kind == "" || m.Kind == kind)
+	return err == nil && !m.Expired && m.OwnerID == uid && (kind == "" || m.Kind == kind)
 }
 
 var imageMimes = map[string]bool{"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true}
 
 func classify(mimeType, requested string) string {
+	if requested == "file" {
+		return "file" // a photo sent "without compression" stays a document
+	}
 	switch {
 	case imageMimes[mimeType]:
 		return "image"
@@ -90,6 +98,10 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, u *User) e
 	if !s.limiter.allow("upload:"+itoa(u.ID), 120, time.Hour) {
 		return errf(429, "rate_limited", "too many uploads, try again later")
 	}
+	// The disk guard comes first: an almost full disk would take the database down with it.
+	if err := s.checkDisk(r.ContentLength); err != nil {
+		return err
+	}
 	st := s.cfg()
 	maxAny := int64(max(st.MaxImageMB, st.MaxVideoMB, st.MaxFileMB)) << 20
 	r.Body = http.MaxBytesReader(w, r.Body, maxAny+(1<<20))
@@ -114,7 +126,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, u *User) e
 		if part.FormName() != "file" {
 			continue
 		}
-		m, err := s.storeUpload(part, u.ID, requested)
+		m, err := s.storeUpload(part, u.ID, requested, r.ContentLength)
 		if err != nil {
 			return err
 		}
@@ -123,7 +135,16 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, u *User) e
 	}
 }
 
-func (s *Server) storeUpload(part *multipart.Part, uid int64, requested string) (*Media, error) {
+// storeUpload saves one file. estimate is the request size, used to refuse an upload that cannot
+// fit the user's quota before any of it is written.
+func (s *Server) storeUpload(part *multipart.Part, uid int64, requested string, estimate int64) (*Media, error) {
+	// Profile, room and brand pictures are kept out of quotas and expiry.
+	keep := requested == "avatar"
+	if !keep {
+		if err := s.checkQuota(uid, max(0, estimate-4096)); err != nil {
+			return nil, err
+		}
+	}
 	name := trimLen(filepath.Base(part.FileName()), 120)
 	declared := part.Header.Get("Content-Type")
 	id := randomHex(16)
@@ -177,15 +198,25 @@ func (s *Server) storeUpload(part *multipart.Part, uid int64, requested string) 
 	if size == 0 {
 		return nil, errf(400, "bad_request", "file is empty")
 	}
-	m := &Media{ID: id, OwnerID: uid, Kind: kind, Mime: mimeType, Name: name, Size: size}
+	if keep && kind != "image" {
+		return nil, errf(400, "bad_request", "profile and room pictures must be images")
+	}
+	created := nowMs()
+	m := &Media{ID: id, OwnerID: uid, Kind: kind, Mime: mimeType, Name: name, Size: size, Keep: keep}
+	if !keep {
+		m.ExpiresAt = s.cfg().retention().expiry(size, created)
+	}
 	if kind == "image" {
 		m.Width, m.Height, m.HasThumb = s.makeThumb(path)
 	}
-	if _, err := s.db.Exec(`INSERT INTO media(id, owner_id, kind, mime, name, size, width, height, has_thumb, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		m.ID, uid, m.Kind, m.Mime, m.Name, m.Size, m.Width, m.Height, boolInt(m.HasThumb), nowMs()); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO media(id, owner_id, kind, mime, name, size, width, height, has_thumb, created_at, expires_at, keep) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		m.ID, uid, m.Kind, m.Mime, m.Name, m.Size, m.Width, m.Height, boolInt(m.HasThumb), created, m.ExpiresAt, boolInt(keep)); err != nil {
 		return nil, err
 	}
 	ok = true
+	if !keep && s.cfg().QuotaMode == "oldest" {
+		s.makeRoom(uid, m.ID)
+	}
 	return m, nil
 }
 
@@ -238,6 +269,10 @@ func (s *Server) handleServeMedia(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if m.Expired {
+		http.Error(w, "this file has expired on the server", http.StatusGone)
+		return
+	}
 	path := s.mediaPath(m.ID)
 	contentType := m.Mime
 	if r.PathValue("variant") == "thumb" && m.HasThumb {
@@ -261,9 +296,13 @@ func (s *Server) handleServeMedia(w http.ResponseWriter, r *http.Request) {
 	h.Set("ETag", `"`+m.ID+`"`)
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	if m.Kind == "file" {
-		contentType = "application/octet-stream"
-		h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": m.Name}))
+	// ?dl=1 asks for a download of any kind (photos and videos otherwise open in the browser).
+	// Plain files are always downloads: serving arbitrary uploads inline would be unsafe.
+	if m.Kind == "file" || r.URL.Query().Get("dl") == "1" {
+		if m.Kind == "file" {
+			contentType = "application/octet-stream"
+		}
+		h.Set("Content-Disposition", attachmentHeader(m.Name, m.Kind))
 	}
 	h.Set("Content-Type", contentType)
 	http.ServeContent(w, r, "", stat.ModTime(), f)
@@ -273,4 +312,23 @@ func (s *Server) removeMediaFiles(id string) {
 	p := s.mediaPath(id)
 	os.Remove(p)
 	os.Remove(p + "_t")
+}
+
+// attachmentHeader names the download. Non-ASCII names (Persian) travel as RFC 5987 filename*,
+// with an ASCII fallback for old clients.
+func attachmentHeader(name, kind string) string {
+	if name == "" {
+		name = kind
+	}
+	ascii := strings.Map(func(r rune) rune {
+		if r < 0x20 || r > 0x7e || r == '"' || r == '\\' {
+			return '_'
+		}
+		return r
+	}, name)
+	v := mime.FormatMediaType("attachment", map[string]string{"filename": name})
+	if ascii == name && v != "" {
+		return v
+	}
+	return `attachment; filename="` + ascii + `"; filename*=UTF-8''` + url.PathEscape(name)
 }

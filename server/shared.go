@@ -44,7 +44,7 @@ func (s *Server) handleShared(w http.ResponseWriter, r *http.Request, u *User) e
 		return err
 	}
 	const fromMedia = ` FROM messages m JOIN media md ON md.id=m.media_id
-		WHERE m.chat_id=? AND m.media_id<>'' AND m.kind IN ('image','video','audio','voice','file')`
+		WHERE m.chat_id=? AND m.media_id<>'' AND md.removed=0 AND m.kind IN ('image','video','audio','voice','file')`
 
 	switch typ := r.URL.Query().Get("type"); typ {
 	case "":
@@ -94,7 +94,7 @@ func (s *Server) handleShared(w http.ResponseWriter, r *http.Request, u *User) e
 		return nil
 
 	case "documents", "photos", "movies", "other":
-		msgs, err := s.sharedMessages(id, `m.media_id<>'' AND m.kind IN ('image','video','audio','voice','file') AND `+sharedClass+`='`+typ+`'`)
+		msgs, err := s.sharedMessages(id, `m.media_id<>'' AND COALESCE(md.removed,0)=0 AND m.kind IN ('image','video','audio','voice','file') AND `+sharedClass+`='`+typ+`'`)
 		if err != nil {
 			return err
 		}

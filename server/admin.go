@@ -38,7 +38,11 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request, u *Use
 	count("groups", `SELECT COUNT(*) FROM chats WHERE type='group'`)
 	count("channels", `SELECT COUNT(*) FROM chats WHERE type='channel'`)
 	count("mediaFiles", `SELECT COUNT(*) FROM media`)
-	count("mediaBytes", `SELECT COALESCE(SUM(size),0) FROM media`)
+	count("mediaBytes", `SELECT COALESCE(SUM(size),0) FROM media WHERE removed=0`)
+	if _, free, ok := s.diskFree(); ok {
+		out["diskFree"] = free
+		out["diskLow"] = free < s.minFreeBytes()
+	}
 	count("calls24h", `SELECT COUNT(*) FROM calls WHERE started_at>?`, dayAgo)
 	count("adClicks", `SELECT COALESCE(SUM(clicks),0) FROM ads`)
 	count("adImpressions", `SELECT COALESCE(SUM(impressions),0) FROM ads`)
@@ -85,7 +89,9 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request, u *Use
 	}
 	var total int
 	s.db.QueryRow(`SELECT COUNT(*) FROM users u WHERE `+where, like, like).Scan(&total)
-	rows, err := s.db.Query(`SELECT `+userCols+`, (SELECT COUNT(*) FROM messages m WHERE m.sender_id=u.id) FROM users u WHERE `+where+` ORDER BY u.id DESC LIMIT ? OFFSET ?`,
+	rows, err := s.db.Query(`SELECT `+userCols+`, (SELECT COUNT(*) FROM messages m WHERE m.sender_id=u.id), u.quota_mb,
+		(SELECT COALESCE(SUM(size),0) FROM media md WHERE md.owner_id=u.id AND md.removed=0 AND md.keep=0)
+		FROM users u WHERE `+where+` ORDER BY u.id DESC LIMIT ? OFFSET ?`,
 		like, like, per, (page-1)*per)
 	if err != nil {
 		return err
@@ -93,19 +99,21 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request, u *Use
 	defer rows.Close()
 	type row struct {
 		*User
-		Messages int64 `json:"messages"`
+		Messages  int64 `json:"messages"`
+		QuotaMB   int64 `json:"quotaMB"`
+		UsedBytes int64 `json:"usedBytes"`
 	}
 	list := []row{}
 	for rows.Next() {
 		var x User
 		var admin, banned, deleted, hide int
-		var msgs int64
-		if err := rows.Scan(&x.ID, &x.Username, &x.DisplayName, &x.Bio, &x.Avatar, &admin, &banned, &deleted, &hide, &x.LastSeen, &x.CreatedAt, &msgs); err != nil {
+		var msgs, quota, used int64
+		if err := rows.Scan(&x.ID, &x.Username, &x.DisplayName, &x.Bio, &x.Avatar, &admin, &banned, &deleted, &hide, &x.LastSeen, &x.CreatedAt, &msgs, &quota, &used); err != nil {
 			return err
 		}
 		x.IsAdmin, x.Banned, x.HideLastSeen = admin == 1, banned == 1, hide == 1
 		x.Online = s.hub.online(x.ID)
-		list = append(list, row{&x, msgs})
+		list = append(list, row{&x, msgs, quota, used})
 	}
 	writeJSON(w, 200, map[string]any{"users": list, "total": total, "page": page, "perPage": per})
 	return rows.Err()
@@ -125,6 +133,7 @@ func (s *Server) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request, u
 		IsAdmin     *bool   `json:"isAdmin"`
 		Password    *string `json:"password"`
 		DisplayName *string `json:"displayName"`
+		QuotaMB     *int64  `json:"quotaMB"` // -1 = server default, 0 = unlimited
 	}
 	if err := readJSON(r, &req); err != nil {
 		return err
@@ -143,6 +152,12 @@ func (s *Server) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request, u
 	}
 	if req.IsAdmin != nil {
 		if _, err := s.db.Exec(`UPDATE users SET is_admin=? WHERE id=?`, boolInt(*req.IsAdmin), id); err != nil {
+			return err
+		}
+	}
+	if req.QuotaMB != nil {
+		q := max(-1, min(*req.QuotaMB, 1<<30))
+		if _, err := s.db.Exec(`UPDATE users SET quota_mb=? WHERE id=?`, q, id); err != nil {
 			return err
 		}
 	}
@@ -256,10 +271,20 @@ func (s *Server) handleAdminSaveSettings(w http.ResponseWriter, r *http.Request,
 			if m, err := s.mediaByID(id); err != nil || m.Kind != "image" {
 				return errf(400, "bad_request", "branding images must be uploaded images")
 			}
+			s.keepMedia(id)
 		}
 	}
+	before := s.cfg().retention()
 	if err := s.saveSettings(st); err != nil {
 		return err
+	}
+	// New retention rules apply to the files already on the server too (the panel showed the
+	// admin what that removes before they saved).
+	if after := s.cfg().retention(); after != before {
+		if err := s.reapplyRetention(after); err != nil {
+			return err
+		}
+		go s.expireMedia()
 	}
 	go s.applyTURN()
 	s.hub.broadcast("config", s.publicConfig())

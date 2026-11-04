@@ -312,10 +312,10 @@ table.tbl {
   border-radius: 50%;
   border: 2px solid transparent;
 }
-.color-swatches button[aria-pressed='true'] {
+.color-swatches button[aria-pressed="true"] {
   border-color: var(--text);
 }
-.color-swatches input[type='color'] {
+.color-swatches input[type="color"] {
   width: 34px;
   height: 34px;
   border: 0;
@@ -424,3 +424,98 @@ table.tbl {
   margin-top: 10px;
 }
 
+/* ---------- storage ---------- */
+.disk-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  background: #d70015;
+}
+.storage-card .sc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.storage-card .sc-head h3 {
+  margin: 0;
+}
+.sc-disk {
+  position: relative;
+  height: 12px;
+  border-radius: 99px;
+  background: var(--fill, rgba(120, 120, 128, 0.16));
+  overflow: hidden;
+}
+.sc-disk i {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.sc-disk.low i {
+  background: #d70015;
+}
+.sc-disk b {
+  position: absolute;
+  inset-block: 0;
+  width: 2px;
+  background: #d70015;
+  opacity: 0.8;
+}
+.sc-line {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.sc-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+}
+.sc-cols h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.sc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13.5px;
+}
+.sc-row .grow {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-meter {
+  width: 80px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--fill, rgba(120, 120, 128, 0.16));
+  overflow: hidden;
+}
+.sc-meter i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.storage-card .chart-card {
+  padding: 0;
+  margin: 18px 0 0;
+  border: 0;
+  background: none;
+}
