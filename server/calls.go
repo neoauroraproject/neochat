@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -460,6 +461,24 @@ func (t *turnServer) status() map[string]any {
 }
 
 // apply (re)starts or stops the relay to match settings. It is a no-op when nothing changed.
+// defaultRelayPorts is the TURN relay's media port range: 200 ports, enough for about 100
+// relayed calls at once on a private server.
+const defaultRelayPorts = "49160-49359"
+
+// relayPortRange parses "min-max"; anything else (empty, "any") means random ports.
+func relayPortRange(v string) (uint16, uint16, bool) {
+	a, b, ok := strings.Cut(strings.TrimSpace(v), "-")
+	if !ok {
+		return 0, 0, false
+	}
+	lo, err1 := strconv.Atoi(strings.TrimSpace(a))
+	hi, err2 := strconv.Atoi(strings.TrimSpace(b))
+	if err1 != nil || err2 != nil || lo < 1024 || hi > 65535 || hi < lo {
+		return 0, 0, false
+	}
+	return uint16(lo), uint16(hi), true
+}
+
 func (s *Server) applyTURN() {
 	st := s.cfg()
 	t := s.turn
@@ -508,7 +527,13 @@ func (s *Server) applyTURN() {
 		log.Printf("turn: listen udp %s: %v", addr, err)
 		return
 	}
+	// Relayed call media uses a fixed port range, so a firewall can open exactly those ports
+	// (the installer does); random ports would be blocked by any active firewall.
+	minPort, maxPort, ranged := relayPortRange(s.opts.RelayPorts)
 	gen := func() turn.RelayAddressGenerator {
+		if ranged {
+			return &turn.RelayAddressGeneratorPortRange{RelayAddress: ip, Address: "0.0.0.0", MinPort: minPort, MaxPort: maxPort}
+		}
 		return &turn.RelayAddressGeneratorStatic{RelayAddress: ip, Address: "0.0.0.0"}
 	}
 	cfg := turn.ServerConfig{

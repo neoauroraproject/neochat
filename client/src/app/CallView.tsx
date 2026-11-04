@@ -9,6 +9,7 @@ import { canDocPip, canSystemPip, enterSystemPip, openDocPip, usePip } from "../
 import { useApp } from "../store";
 import type { Message } from "../types";
 import { CallFloat, useStream } from "./CallFloat";
+import { EarGuard } from "./EarGuard";
 import { useMobile, useTick } from "./hooks";
 
 // Apple's momentum projection: where a flick would come to rest.
@@ -307,6 +308,14 @@ export function CallView({ embedded }: { embedded?: boolean }) {
       onPointerCancel={onSwipeUp}
     >
       <audio ref={remoteAudio} autoPlay playsInline />
+      <EarGuard
+        active={
+          isMobile &&
+          !embedded &&
+          !st.video &&
+          (st.phase === "outgoing" || st.phase === "connecting" || st.phase === "active")
+        }
+      />
       {(st.video || localHasVideo) && (
         <video
           ref={mainVideo}

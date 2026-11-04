@@ -93,7 +93,11 @@ export function CallFloat() {
 
   const onDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
-    ref.current!.setPointerCapture(e.pointerId);
+    try {
+      ref.current!.setPointerCapture(e.pointerId);
+    } catch {
+      /* the pointer is already gone; the window still follows its own events */
+    }
     drag.current = {
       x: e.clientX,
       y: e.clientY,

@@ -24,7 +24,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var version = "1.6.2"
+var version = "1.6.3"
 
 // defaultAdFeed is the NeoAurora license worker that serves network ads (override with -ad-feed).
 var defaultAdFeed = "https://license.hossein-m466.workers.dev"
@@ -39,6 +39,7 @@ type Options struct {
 	SelfSigned bool
 	Hosts      string
 	PublicIP   string
+	RelayPorts string
 	HTTPPort   string
 	AdFeed     string
 }
@@ -92,6 +93,7 @@ func main() {
 	selfSigned := fs.String("self-signed", env("NEOCHAT_SELF_SIGNED", "true"), "generate a self-signed certificate when no cert is given (true/false)")
 	fs.StringVar(&o.Hosts, "hosts", env("NEOCHAT_HOSTS", ""), "extra hostnames/IPs for the self-signed certificate, comma separated")
 	fs.StringVar(&o.PublicIP, "public-ip", env("NEOCHAT_PUBLIC_IP", ""), "IP address advertised by the TURN relay (default: auto-detect)")
+	fs.StringVar(&o.RelayPorts, "turn-relay-ports", env("NEOCHAT_TURN_RELAY_PORTS", defaultRelayPorts), "UDP/TCP port range the TURN relay uses for call media, e.g. 49160-49359 (\"any\" = random ports)")
 	fs.StringVar(&o.AdFeed, "ad-feed", env("NEOCHAT_AD_FEED", defaultAdFeed), "NeoAurora ad network endpoint")
 	fs.StringVar(&o.HTTPPort, "http-redirect", env("NEOCHAT_HTTP_REDIRECT", ""), "also listen on this address with plain HTTP and redirect to HTTPS (e.g. :80)")
 	fs.Usage = func() {

@@ -6,6 +6,7 @@ import { useApp } from "./store";
 import type { User } from "./types";
 import { onEvent, wsSend } from "./ws";
 import { releaseMic } from "./voice";
+import { askMotionPermission } from "./app/EarGuard";
 
 type Phase = "idle" | "outgoing" | "incoming" | "connecting" | "active" | "ended";
 
@@ -430,8 +431,46 @@ async function keepAwake() {
 
 document.addEventListener("visibilitychange", () => {
   // The system drops the lock whenever the app is hidden; take it again on return.
-  if (document.visibilityState === "visible" && useCall.getState().phase === "active") keepAwake();
+  if (document.visibilityState === "visible" && useCall.getState().phase === "active") {
+    keepAwake();
+    reviveCamera();
+  }
 });
+
+/**
+ * iOS stops the camera while the app is in the background. Back in the app, a camera that was on
+ * is started again; one the user turned off stays off.
+ */
+async function reviveCamera() {
+  const st = useCall.getState();
+  const stream = st.localStream;
+  if (!stream || !pc || !st.video || st.cameraOff) return;
+  const live = stream.getVideoTracks().filter((tr) => tr.readyState === "live");
+  if (live.length) return;
+  let track: MediaStreamTrack;
+  try {
+    track = (
+      await navigator.mediaDevices.getUserMedia({ video: camera(st.facing) })
+    ).getVideoTracks()[0];
+  } catch {
+    return;
+  }
+  if (useCall.getState().cameraOff || !pc) {
+    track.stop();
+    return;
+  }
+  stream.getVideoTracks().forEach((tr) => stream.removeTrack(tr));
+  stream.addTrack(track);
+  const sender = pc
+    .getTransceivers()
+    .find(
+      (x) =>
+        x.receiver.track.kind === "video" &&
+        (!x.sender.track || x.sender.track.readyState === "ended"),
+    )?.sender;
+  await sender?.replaceTrack(track).catch(() => {});
+  useCall.setState({ localStream: new MediaStream(stream.getTracks()) });
+}
 
 /** Whether this browser can route call audio to a chosen output (not iOS, where the system decides). */
 export const canPickOutput =
@@ -525,6 +564,7 @@ export const useCall = create<CallState>((set, getState) => ({
 
   async start(peer, video) {
     if (getState().phase !== "idle" && getState().phase !== "ended") return;
+    if (!video) askMotionPermission();
     const app = useApp.getState();
     if (!app.config?.callsEnabled) return app.toast(t("call.disabled"), "error");
     isCaller = true;
@@ -563,6 +603,7 @@ export const useCall = create<CallState>((set, getState) => ({
   async accept() {
     const st = getState();
     if (st.phase !== "incoming" || !st.callId) return;
+    if (!st.video) askMotionPermission();
     stopTone();
     clearCallNotice(st.chatId);
     isCaller = false;
@@ -600,7 +641,7 @@ export const useCall = create<CallState>((set, getState) => ({
   async toggleCamera() {
     const st = getState();
     const stream = st.localStream;
-    if (stream && !stream.getVideoTracks().length) {
+    if (stream && !stream.getVideoTracks().length && !st.cameraOff) {
       // A voice call becomes a video call: add a camera and renegotiate.
       if (!useApp.getState().config?.videoCallsEnabled) {
         useApp.getState().toast(t("call.disabled"), "error");
@@ -629,9 +670,48 @@ export const useCall = create<CallState>((set, getState) => ({
       syncMediaSession();
       return;
     }
-    const off = !st.cameraOff;
-    stream?.getVideoTracks().forEach((tr) => (tr.enabled = !off));
-    set({ cameraOff: off, weakHint: false, videoAsk: false });
+    if (!stream) return;
+    if (!st.cameraOff) {
+      // Off means off: the camera is released (its light goes out) and nothing is sent, so neither
+      // returning to the app nor reopening the call screen can bring it back by itself.
+      for (const tr of stream.getVideoTracks()) {
+        const sender = pc?.getSenders().find((x) => x.track === tr);
+        await sender?.replaceTrack(null).catch(() => {});
+        tr.stop();
+        stream.removeTrack(tr);
+      }
+      set({
+        cameraOff: true,
+        weakHint: false,
+        videoAsk: false,
+        localStream: new MediaStream(stream.getTracks()),
+      });
+    } else {
+      let track: MediaStreamTrack;
+      try {
+        track = (
+          await navigator.mediaDevices.getUserMedia({ video: camera(st.facing) })
+        ).getVideoTracks()[0];
+      } catch {
+        useApp.getState().toast(t("call.noMedia"), "error");
+        return;
+      }
+      const cur = getState().localStream || stream;
+      cur.addTrack(track);
+      // The video slot from the start of the call is still there, so no renegotiation is needed.
+      const slot = pc
+        ?.getTransceivers()
+        .find((x) => x.receiver.track.kind === "video" && !x.sender.track);
+      if (slot) await slot.sender.replaceTrack(track).catch(() => {});
+      else pc?.addTrack(track, cur);
+      if (pc) tuneVideo(pc);
+      set({
+        cameraOff: false,
+        weakHint: false,
+        videoAsk: false,
+        localStream: new MediaStream(cur.getTracks()),
+      });
+    }
     sendState();
     syncMediaSession();
   },
@@ -642,7 +722,7 @@ export const useCall = create<CallState>((set, getState) => ({
 
   async flip() {
     const st = getState();
-    if (!st.video || !st.localStream) return;
+    if (!st.video || !st.localStream || st.cameraOff) return;
     const facing = st.facing === "user" ? "environment" : "user";
     try {
       // Same constraints as the first camera; a bare facingMode request falls back to 640×480.

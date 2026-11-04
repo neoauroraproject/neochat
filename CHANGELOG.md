@@ -2,6 +2,18 @@
 
 All notable changes to NeoChat are documented in this file.
 
+## [1.6.3] - 2026-11-04
+
+### Added
+
+- Voice calls on phones: the screen turns black and ignores the cheek when the phone is raised to the ear, and comes back when it is lowered or swiped up (web apps cannot read the proximity sensor; this uses the phone's tilt, or a few seconds without a touch when the tilt is not available)
+- Call tuning on install and update (and `neochat tune` / menu item 12): larger UDP buffers, BBR congestion control, MTU probing, more open files, a fixed relay media port range (49160-49359/udp) opened in the firewall, and the public address advertised automatically when the server is behind NAT
+
+### Fixed
+
+- A camera turned off in a video call came back on after returning to the call or to the app: turning it off now releases the camera and sends nothing; it comes back only from the button, and a camera that iOS stopped in the background is restarted only if it was on
+- A thin band at the bottom of the installed app: the page behind the app has the app's color, the page scroll left by the iOS keyboard is reset, and the space under the message box no longer adds a margin on top of the home-bar space
+
 ## [1.6.2] - 2026-11-04
 
 ### Added

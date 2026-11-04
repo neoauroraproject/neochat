@@ -1967,3 +1967,37 @@
   font-size: 13px;
   color: rgba(255, 255, 255, 0.6);
 }
+
+/* ---------- installed app: no strip at the bottom ---------- */
+/* Whatever iOS leaves uncovered at the screen's edge (a keyboard that closed with the page still
+   scrolled, a viewport a few pixels short) is the app's own color, never a lighter band. */
+html:has(.phone),
+html:has(.phone) body {
+  background: var(--m-bg);
+}
+/* Under the message box the home-bar space replaces the margin instead of adding to it. */
+.phone .composer-wrap {
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+}
+.ear-guard {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  background: #000;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ear-hint {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.55);
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+.ear-hint.on {
+  opacity: 1;
+}

@@ -161,6 +161,7 @@ public_ip() { hostname -I 2>/dev/null | awk '{print $1}'; }
 
 load_config() {
   NEOCHAT_ADDR=":8443" NEOCHAT_DATA=$DEFAULT_DATA NEOCHAT_HTTP_REDIRECT="" NEOCHAT_HOSTS=""
+  NEOCHAT_TURN_RELAY_PORTS="" NEOCHAT_PUBLIC_IP=""
   # shellcheck disable=SC1090
   [ -f "$ENV_FILE" ] && . "$ENV_FILE"
   HTTPS_PORT=${NEOCHAT_ADDR##*:}
@@ -251,7 +252,9 @@ NEOCHAT_ADDR=:$HTTPS_PORT
 NEOCHAT_HTTP_REDIRECT=$redirect
 NEOCHAT_DATA=$DATA
 NEOCHAT_HOSTS=$DOMAIN
+NEOCHAT_TURN_RELAY_PORTS=${NEOCHAT_TURN_RELAY_PORTS:-$RELAY_DEFAULT}
 EOF
+  [ -z "${NEOCHAT_PUBLIC_IP:-}" ] || echo "NEOCHAT_PUBLIC_IP=$NEOCHAT_PUBLIC_IP" >>"$ENV_FILE"
   chmod 644 "$ENV_FILE"
 }
 
@@ -271,7 +274,7 @@ ExecStart=$BIN
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 Restart=always
 RestartSec=3
-LimitNOFILE=65536
+LimitNOFILE=1048576
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
@@ -287,7 +290,7 @@ EOF
 open_firewall() { # port/proto ...
   local r
   if has ufw && ufw status 2>/dev/null | grep -q "Status: active"; then
-    for r in "$@"; do ufw allow "$r" >/dev/null; done
+    for r in "$@"; do ufw allow "${r/-/:}" >/dev/null; done
     ok "firewall (ufw): opened $*"
   elif has firewall-cmd && firewall-cmd --state >/dev/null 2>&1; then
     for r in "$@"; do firewall-cmd -q --permanent --add-port="$r"; done
@@ -299,7 +302,117 @@ open_firewall() { # port/proto ...
 firewall_rules() {
   local rules=("$HTTPS_PORT/tcp" "${TURN_PORT:-3478}/tcp" "${TURN_PORT:-3478}/udp")
   [ "$HTTP_PORT" = off ] || rules+=("$HTTP_PORT/tcp")
+  rules+=("${NEOCHAT_TURN_RELAY_PORTS:-$RELAY_DEFAULT}/udp")
   printf '%s\n' "${rules[@]}"
+}
+
+# ---------------------------------------------------------------- call tuning
+
+RELAY_DEFAULT="49160-49359"
+TUNE_CHANGED=0
+
+is_private_ip() {
+  case "$1" in
+    10.* | 192.168.* | 127.* | 169.254.*) return 0 ;;
+    172.1[6-9].* | 172.2[0-9].* | 172.3[01].*) return 0 ;;
+    100.6[4-9].* | 100.[7-9][0-9].* | 100.1[01][0-9].* | 100.12[0-7].*) return 0 ;;
+  esac
+  return 1
+}
+
+valid_ipv4() { [[ $1 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; }
+
+# detect_public_ip asks the outside world, then the domain's DNS (works when international
+# internet is cut but local DNS still resolves the server's name).
+detect_public_ip() {
+  local ip=""
+  if has curl; then
+    ip=$(curl -s4 --max-time 4 https://api.ipify.org 2>/dev/null || true)
+    valid_ipv4 "$ip" || ip=$(curl -s4 --max-time 4 https://ifconfig.me 2>/dev/null || true)
+  fi
+  if ! valid_ipv4 "$ip" && [ -n "${DOMAIN:-}" ] && has getent; then
+    ip=$(getent ahostsv4 "${DOMAIN%%,*}" 2>/dev/null | awk '{print $1; exit}')
+  fi
+  valid_ipv4 "$ip" && ! is_private_ip "$ip" && printf '%s' "$ip"
+}
+
+# tune_calls readies the server for smooth calls and is safe to run any number of times (install,
+# update, menu): larger UDP buffers so the call relay does not drop packets in bursts, BBR
+# congestion control and no slow restart after idle for steadier throughput, MTU probing for
+# routes that silently drop large packets, many more open connections, the relay's media ports
+# opened in the firewall, and the public address the relay must advertise behind NAT.
+tune_calls() {
+  [ "$(uname -s)" = Linux ] || return 0
+  TUNE_CHANGED=0
+  say "Optimizing the server for calls"
+  local f=/etc/sysctl.d/90-neochat-calls.conf bbr=0
+  modprobe tcp_bbr 2>/dev/null || true
+  grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null && bbr=1
+  if [ "$bbr" = 1 ] && [ -d /etc/modules-load.d ]; then echo tcp_bbr >/etc/modules-load.d/neochat-bbr.conf; fi
+  if [ -d /etc/sysctl.d ]; then
+    {
+      echo "# Written by NeoChat: network tuning for calls. Delete this file and reboot to undo."
+      echo "net.core.rmem_max = 8388608"
+      echo "net.core.wmem_max = 8388608"
+      echo "net.core.rmem_default = 1048576"
+      echo "net.core.wmem_default = 1048576"
+      echo "net.ipv4.udp_rmem_min = 16384"
+      echo "net.ipv4.udp_wmem_min = 16384"
+      echo "net.core.netdev_max_backlog = 16384"
+      echo "net.core.somaxconn = 4096"
+      echo "net.ipv4.tcp_mtu_probing = 1"
+      echo "net.ipv4.tcp_fastopen = 3"
+      echo "net.ipv4.tcp_slow_start_after_idle = 0"
+      echo "fs.file-max = 2097152"
+      if [ "$bbr" = 1 ]; then
+        echo "net.core.default_qdisc = fq"
+        echo "net.ipv4.tcp_congestion_control = bbr"
+      fi
+    } >"$f"
+    if sysctl -e -q -p "$f" >/dev/null 2>&1; then
+      ok "network: 8 MB UDP buffers, MTU probing$([ "$bbr" = 1 ] && printf ', BBR congestion control')"
+    else
+      warn "this system does not allow network tuning (a container?); calls still work"
+    fi
+  fi
+
+  if [ -f "$ENV_FILE" ]; then
+    if ! grep -q '^NEOCHAT_TURN_RELAY_PORTS=' "$ENV_FILE"; then
+      echo "NEOCHAT_TURN_RELAY_PORTS=$RELAY_DEFAULT" >>"$ENV_FILE"
+      TUNE_CHANGED=1
+    fi
+    # Behind NAT (most cloud servers) the relay must hand out the public address, not the private one.
+    local lan pub
+    lan=$(public_ip)
+    if ! grep -q '^NEOCHAT_PUBLIC_IP=.' "$ENV_FILE" && is_private_ip "$lan"; then
+      pub=$(detect_public_ip || true)
+      if [ -n "$pub" ]; then
+        sed -i '/^NEOCHAT_PUBLIC_IP=/d' "$ENV_FILE"
+        echo "NEOCHAT_PUBLIC_IP=$pub" >>"$ENV_FILE"
+        TUNE_CHANGED=1
+        ok "call relay: this server is behind NAT; advertising its public address $pub"
+      else
+        warn "call relay: behind NAT and the public address is unknown; set it in Admin > Calls"
+      fi
+    fi
+    load_config
+  fi
+  local relay=${NEOCHAT_TURN_RELAY_PORTS:-$RELAY_DEFAULT}
+  open_firewall "$relay/udp"
+  ok "call relay media ports: $relay/udp"
+}
+
+cmd_tune() {
+  need_root
+  installed || die "NeoChat is not installed; run: curl -fsSL $RAW | sudo bash"
+  load_config
+  tune_calls
+  if [ "$TUNE_CHANGED" = 1 ] || ! grep -q '^LimitNOFILE=1048576' "$UNIT" 2>/dev/null; then
+    write_unit
+    say "Restarting NeoChat"
+    service_start
+  fi
+  ok "calls are optimized"
 }
 
 # ---------------------------------------------------------------- certificates
@@ -576,6 +689,7 @@ cmd_install() {
   install_ctl
   mapfile -t rules < <(firewall_rules)
   open_firewall "${rules[@]}"
+  tune_calls
   say "Starting NeoChat"
   service_start
   first_setup
@@ -592,10 +706,17 @@ cmd_update() {
   latest=${OPT_VERSION:-$(latest_tag)}
   if [ -n "$latest" ] && [ "v$cur" = "$latest" ] && [ "$FORCE" != 1 ]; then
     ok "NeoChat $cur is already the latest version"
+    tune_calls
+    if [ "$TUNE_CHANGED" = 1 ] || ! grep -q '^LimitNOFILE=1048576' "$UNIT" 2>/dev/null; then
+      write_unit
+      say "Restarting NeoChat with the call settings"
+      service_start
+    fi
   else
     download_binary
     place_binary
     write_unit
+    tune_calls
     say "Restarting NeoChat"
     service_start
     ok "updated $cur -> $(installed_version)"
@@ -719,6 +840,9 @@ cmd_status() {
     printf '  Certificate  self-signed  %s(get a trusted one: neochat ssl)%s\n' "$C_DIM" "$C_0"
   fi
   printf '  Data         %s\n' "$DATA"
+  printf '  Calls        relay media ports %s/udp%s%s\n' "${NEOCHAT_TURN_RELAY_PORTS:-$RELAY_DEFAULT}" \
+    "$([ -f /etc/sysctl.d/90-neochat-calls.conf ] && printf ', network tuned')" \
+    "$([ -n "${NEOCHAT_PUBLIC_IP:-}" ] && printf ', public address %s' "$NEOCHAT_PUBLIC_IP")"
   printf '  Settings     %s\n' "$ENV_FILE"
 }
 
@@ -759,6 +883,7 @@ Commands:
   update            update to the latest release (--version vX.Y.Z to pick one)
   config            change ports and domain
   ssl [domain|off]  get a free Let's Encrypt certificate (or go back to self-signed)
+  tune              optimize the server for calls (also done by install and update)
   uninstall         remove NeoChat (--purge also deletes all data)
   start|stop|restart|status|logs
   reset-password    set a user's password: reset-password <user> [password]
@@ -799,7 +924,8 @@ menu() {
     printf '  1) Install              2) Update               3) Change ports / domain\n'
     printf '  4) Domain SSL           5) Status               6) Logs\n'
     printf '  7) Start                8) Stop                 9) Restart\n'
-    printf ' 10) Reset a password    11) Uninstall            0) Exit\n\n'
+    printf ' 10) Reset a password    11) Uninstall           12) Optimize calls\n'
+    printf '  0) Exit\n\n'
     case "$(ask "Choose" "0")" in
       1) cmd_install ;;
       2) cmd_update ;;
@@ -812,6 +938,7 @@ menu() {
       9) systemctl restart "$SERVICE" && ok "restarted" ;;
       10) cmd_reset_password ;;
       11) cmd_uninstall && installed || return 0 ;;
+      12) cmd_tune ;;
       0 | q | exit) return 0 ;;
       *) warn "unknown choice" ;;
     esac
@@ -851,6 +978,7 @@ done
 case "$CMD" in
   "") if installed; then menu; else cmd_install; fi ;;
   install) cmd_install ;;
+  tune | optimize) cmd_tune ;;
   update | upgrade) cmd_update ;;
   config | ports) cmd_config ;;
   ssl | tls | certificate) cmd_ssl "${POS[@]+"${POS[@]}"}" ;;
